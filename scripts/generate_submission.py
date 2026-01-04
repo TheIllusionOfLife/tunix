@@ -196,11 +196,11 @@ graph LR
     dataset_cell = nbf.v4.new_markdown_cell("""
 ## How your finetuning dataset is created
 
-We employ a **Zero-Cost Public Data Strategy**.
-- **Magpie-Reasoning**: Filtered for high-quality reasoning traces, formatted into XML.
-- **UltraFeedback**: Used for style alignment (chosen vs rejected).
-- **GSM8K & MBPP**: Standard datasets formatted for GRPO (Prompt vs Ground Truth).
-All datasets are pre-processed and uploaded as a Kaggle Dataset to save runtime.
+We employ a **Zero-Cost Public Data Strategy** using publicly available datasets:
+- **GSM8K**: Math reasoning dataset with 7,473 training samples for GRPO.
+- **MBPP**: Python coding problems with 374 training samples for GRPO.
+
+Both datasets are formatted with `question` and `answer` columns and uploaded as a Kaggle Dataset to save runtime.
 """)
 
     # --- Template Cell 3: Finetuning Header ---
@@ -208,9 +208,6 @@ All datasets are pre-processed and uploaded as a Kaggle Dataset to save runtime.
 
     # --- Template Cell 4: Mandatory Variables ---
     vars_cell = nbf.v4.new_code_cell("""
-# Your prompt
-PROMPT_TEMPLATE = "<start_of_turn>user\\n{question}<end_of_turn>\\n<start_of_turn>model\\n"
-
 # Training parameters
 TEMPERATURE=0.7
 TOP_K=50
@@ -228,6 +225,10 @@ INF_TEMPERATURE=0
 INF_TOP_K=1
 INF_TOP_P=None
 SEED=42
+
+# System prompt and template (needed for baseline eval and training)
+SYSTEM_PROMPT = "You are a deep thinking AI. You are given a problem. Think about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
+TEMPLATE = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{{question}}<end_of_turn>\\n<start_of_turn>model"
 
 print("Template variables defined.")
 """)
@@ -329,8 +330,7 @@ SFT_OUTPUT_DIR = "sft_checkpoint"
 GRPO_OUTPUT_DIR = "grpo_checkpoint"
 
 # Tuning Hyperparams
-SFT_STEPS = 400 
-GRPO_STEPS = 1500  # Increased from 600 for better convergence
+GRPO_STEPS = 1500  # Optimized for single 9-hour TPU session
 TRAIN_MICRO_BATCH_SIZE = 1 # Keep low for safety
 """)
 
@@ -457,11 +457,8 @@ except Exception as e:
     print(f"Baseline eval skipped: {e}")
 print("Baseline Done.")
 
-# 5. Phase 2: GRPO
-# 5. Phase 2: GRPO
+# 5. GRPO Training Phase
 print("Starting GRPO Phase...")
-SYSTEM_PROMPT = "You are a deep thinking AI. You are given a problem. Think about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
-TEMPLATE = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{{question}}<end_of_turn>\\n<start_of_turn>model"
 
 # --- Reward Functions ---
 # 1. Structure Reward: Checks for correct XML tags
