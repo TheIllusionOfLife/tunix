@@ -638,8 +638,7 @@ trainer = GRPOLearner(
 with mesh:
     def format_fn(x):
         return {
-            "prompts": TEMPLATE.format(question=x["question"]),
-            "question": x["question"],
+            "prompts": x["prompt"],  # Already formatted in dataset
             "answer": x["answer"]
         }
     
