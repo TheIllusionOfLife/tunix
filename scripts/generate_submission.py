@@ -330,7 +330,7 @@ GRPO_OUTPUT_DIR = "grpo_checkpoint"
 
 # Tuning Hyperparams
 SFT_STEPS = 400 
-GRPO_STEPS = 600
+GRPO_STEPS = 1500  # Increased from 600 for better convergence
 TRAIN_MICRO_BATCH_SIZE = 1 # Keep low for safety
 """)
 
@@ -428,11 +428,33 @@ tokenizer = tokenizer_lib.Tokenizer(
 
 # --- Pre-Training Evaluation (Baseline) ---
 print("Running Baseline Evaluation...")
-baseline_prompts = ["User: Janet has 3 apples. She buys 2 more. How many?\\nModel:"]
-for p in baseline_prompts:
-    inputs = tokenizer(p, return_tensors="jax")
-    # outputs = ref_model.generate(**inputs, max_new_tokens=50) # Use ref_model for baseline
-    # print(f"Baseline: {tokenizer.decode(outputs[0])}")
+baseline_prompts = [
+    "Janet has 3 apples. She buys 2 more. How many does she have now?",
+    "Write a python function to add two numbers."
+]
+try:
+    baseline_sampler = sampler_lib.Sampler(
+        transformer=ref_model,
+        tokenizer=tokenizer,
+        cache_config=sampler_lib.CacheConfig(
+            cache_size=512,
+            num_layers=model_config.num_layers,
+            num_kv_heads=model_config.num_kv_heads,
+            head_dim=model_config.head_dim,
+        ),
+    )
+    formatted = [TEMPLATE.format(question=p) for p in baseline_prompts]
+    baseline_out = baseline_sampler(
+        input_strings=formatted,
+        max_generation_steps=100,
+        temperature=0.7,
+        echo=False
+    )
+    print("--- Baseline Model Outputs (Before Training) ---")
+    for p, o in zip(baseline_prompts, baseline_out.text):
+        print(f"Q: {p}\\nA: {o[:200]}...\\n{'-'*40}")
+except Exception as e:
+    print(f"Baseline eval skipped: {e}")
 print("Baseline Done.")
 
 # 5. Phase 2: GRPO

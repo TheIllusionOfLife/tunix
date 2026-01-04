@@ -11,8 +11,8 @@ This file orchestrates the execution plan across all specific documentation.
 
 ## 🗂️ Pre-Run: Dataset Setup
 
-- [ ] **Delete old `tunix-public-data`** on Kaggle (if exists).
-- [ ] **Create new `tunix-public-data`** dataset with:
+- [x] **Delete old `tunix-public-data`** on Kaggle (if exists).
+- [x] **Create new `tunix-public-data`** dataset with:
     - `sft_magpie.jsonl`
     - `sft_ultrafeedback.jsonl`
     - `grpo_gsm8k_train.jsonl`

@@ -95,7 +95,7 @@ from tunix.models.gemma import model as gemma_lib
 from tunix.models.gemma import params as params_lib
 from tunix.rl import rl_cluster as rl_cluster_lib
 from tunix.rl.grpo.grpo_learner import GRPOConfig, GRPOLearner
-from tunix.rl.rollouts import base_rollout
+from tunix.rl.rollout import base_rollout
 from tunix.rl.common import metrics_logger
 from tunix.models.gemma import qwix
 
@@ -259,6 +259,23 @@ def math_correctness_reward(prompts, completions, answer, **kwargs):
             rewards.append(0.0)
     return rewards
 
+def code_correctness_reward(prompts, completions, answer, **kwargs):
+    rewards = []
+    for c, gt in zip(completions, answer):
+        try:
+            match = re.search(r"<answer>(.*?)</answer>", c, re.DOTALL)
+            if match:
+                extracted = match.group(1).strip()
+                if gt.strip() in extracted or extracted in gt.strip():
+                    rewards.append(1.0)
+                else:
+                    rewards.append(0.0)
+            else:
+                rewards.append(0.0)
+        except:
+            rewards.append(0.0)
+    return rewards
+
 # Load Hard Dataset
 try:
     hard_data_file = f"{DATA_DATASET}/private_hard_reasoning.jsonl"
@@ -337,7 +354,7 @@ rl_cluster = rl_cluster_lib.RLCluster(
 # Trainer
 trainer = GRPOLearner(
     rl_cluster=rl_cluster,
-    reward_fns=[soft_structure_reward, structure_reward, math_correctness_reward],
+    reward_fns=[soft_structure_reward, structure_reward, math_correctness_reward, code_correctness_reward],
     algo_config=grpo_config,  # v0.1.5 API uses 'algo_config'
 )
 
