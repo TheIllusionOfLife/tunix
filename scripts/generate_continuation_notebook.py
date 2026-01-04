@@ -338,7 +338,7 @@ rl_cluster = rl_cluster_lib.RLCluster(
 trainer = GRPOLearner(
     rl_cluster=rl_cluster,
     reward_fns=[soft_structure_reward, structure_reward, math_correctness_reward],
-    config=grpo_config,
+    algo_config=grpo_config,  # v0.1.5 API uses 'algo_config'
 )
 
 # Data Formatting & Training

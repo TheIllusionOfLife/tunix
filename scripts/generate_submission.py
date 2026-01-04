@@ -598,17 +598,12 @@ rl_cluster = rl_cluster_lib.RLCluster(
     cluster_config=cluster_config,
 )
 
+
 # Trainer
-    trainer = GRPOLearner(
+trainer = GRPOLearner(
     rl_cluster=rl_cluster,
     reward_fns=[soft_structure_reward, structure_reward, math_correctness_reward, code_correctness_reward],
-    config=grpo_config, # Tunix 0.1.5 uses 'config' generally, but we obey review if it fails. keeping 'config' as prior logs confirmed it working. 
-    # WAIT, Review says "Official demo uses grpo_config". Let's stick to 'config' if we verified it, or swap.
-    # Actually, let's use kwargs to be safe or check if we can verify.
-    # PROCEEDING WITH 'config' based on previous "Fixed version mismatch... adapted code to 0.1.5 API (`config` instead of `algo_config`)" log.
-    # If the review is from a generic "Official Demo" it might be outdated compared to our 0.1.5 pinning.
-    # I will KEEP 'config' but add a comment.
-    config=grpo_config,
+    algo_config=grpo_config,  # v0.1.5 API uses 'algo_config'
 )
 
 # Data Formatting & Training
