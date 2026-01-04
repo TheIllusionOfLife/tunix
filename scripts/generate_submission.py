@@ -291,7 +291,7 @@ except Exception as e:
 !pip install -q tensorboardX
 !pip install -q transformers
 !pip install -q grain
-!pip install "google-tunix[prod]==0.1.3"
+!pip install "git+https://github.com/TheIllusionOfLife/tunix.git@main#egg=google-tunix[prod]"
 !pip install git+https://github.com/google/qwix
 
 # Fix Flax Version to 0.12.0 as required
