@@ -32,7 +32,7 @@ This file orchestrates the execution plan across all specific documentation. Use
 *Goal: Use "Private Data" to simulate a 70B teacher.*
 *> Competitive Edge: Training on "Hardest 5%" of Magpie data (Quality > Quantity).*
 
-- [ ] **Data Curation**: Upload "Private Hard" dataset (Filter: `difficulty > medium`).
+- [x] **Data Curation**: Upload "Private Hard" dataset (Done: `private_hard_reasoning`).
 - [ ] **Chain Sessions**: Train Phase 3 model ON TOP of Phase 2 model.
 - [ ] **Publish Model**: `yuyamukai/tunix-unrestricted-final`.
 - [ ] **Update Notebook**:
