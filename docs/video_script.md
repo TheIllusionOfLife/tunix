@@ -20,7 +20,7 @@ Show the "Format-Align-Reinforce" Diagram (from your Writeup). Zoom in on each b
 
 **Audio**:
 "Our strategy is called 'Format, Align, Reinforce.'
-First, we use **SFT** with the Magpie dataset. This allows us to distill the 'thinking patterns' of massive models like DeepSeek-R1 into our 2B model. We teach it the structure: Reasoning first, Answer second.
+First, we leverage **Gemma-2B-IT's** existing instruction following. We use structure rewards to enforce the XML format: Reasoning first, Answer second.
 Next, we use **GRPO** with Tunix. Instead of a heavy critic model, GRPO lets us optimize for truth in Math and Coding efficiently on a single TPU.
 We generated our own variants of GSM8K and MBPP using public data scripts."
 
@@ -33,7 +33,7 @@ Screen record scrolling through your Notebook (`tunix_zero_cost_train.ipynb`).
 **Audio**:
 "Here's the implementation in Tunix.
 Inside the notebook, we define custom reward functions. We used a 'Structure Reward' to enforce the XML tags, and a 'Symbolic Math Reward' using SymPy to verify answers more robustly than simple string matching.
-The entire pipeline fits into the 9-hour Kaggle TPU limit. We start with SFT for style, then switch to RL for correctness."
+The entire pipeline fits into the 9-hour Kaggle TPU limit. We focus strictly on RL for maximal reasoning improvements."
 
 ## 2:00 - 2:40 | The Demo (Results)
 **Visual**:
@@ -57,6 +57,6 @@ Check out the full code and write-up in the link below. Thanks for watching!"
 ## What to Record (Checklist)
 - [ ] Your Face (Intro/Outro) - optional but good.
 - [ ] Slide: "Tunix Zero-Cost" Title.
-- [ ] Diagram: SFT -> GRPO flow.
+- [ ] Diagram: Base Model -> GRPO flow.
 - [ ] Code: Reward Functions in Notebook.
 - [ ] Demo: Model generating output with `<reasoning>` tags.

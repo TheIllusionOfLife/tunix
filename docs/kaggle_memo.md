@@ -22,7 +22,7 @@
 ## 3. Run Training
 1.  **Execute All Cells**:
     *   The notebook installs `tunix` from the repository (or you can add the repo as a dataset).
-    *   It trains SFT on Magpie data (Format).
+    *   It leverages the pre-trained instruction following of Gemma 2B-IT.
     *   It trains GRPO on GSM8K data (Math Correctness).
     *   It saves the final model.
 
@@ -34,5 +34,5 @@
     *   Select the notebook you just ran.
 
 ## Tips
-*   **Debug Mode**: If debugging, reduce `SFT_STEPS` and `GRPO_STEPS` to 10 to check if it runs through quickly.
+*   **Debug Mode**: If debugging, reduce `GRPO_STEPS` to 10 to check if it runs through quickly.
 *   **Tunix Install**: If `!pip install git+...` fails due to internet off during submission, you must upload the `tunix` wheel or repo as a dataset and install from there.

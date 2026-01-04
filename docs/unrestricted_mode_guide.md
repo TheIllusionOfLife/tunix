@@ -75,6 +75,7 @@ PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session2-checkpoint/checkpoint"
 1. After final session, **upload output as Kaggle Model**:
    - Go to Kaggle → Models → New Model
    - Upload `final_continuation_model/` contents
+   - **Crucial**: Ensure the files are inside a folder named `jax/size/` within the model version.
    - Set visibility: Public
    - Note the Model ID (e.g., `yuyamukai/tunix-gemma2-2b-unrestricted`)
 
