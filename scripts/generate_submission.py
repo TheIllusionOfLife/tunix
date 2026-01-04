@@ -11,7 +11,7 @@ def create_notebook():
 # Strategy: SFT (Magpie + UltraFeedback) -> GRPO (GSM8K + MBPP)
 
 # --- Install Tunix and dependencies ---
-!pip install -q git+https://github.com/google-deepmind/tunix.git
+!pip install -q "git+https://github.com/TheIllusionOfLife/tunix.git@main#egg=google-tunix[prod]"
 !pip install -q flax==0.12.0 optax==0.2.4 chex==0.1.88
 !pip install -q transformers==4.47.0 datasets==3.2.0
 
