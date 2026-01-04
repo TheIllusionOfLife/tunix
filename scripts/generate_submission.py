@@ -291,7 +291,7 @@ except Exception as e:
 !pip install -q tensorboardX
 !pip install -q transformers
 !pip install -q grain
-!pip install "git+https://github.com/TheIllusionOfLife/tunix.git@main#egg=google-tunix[prod]"
+!pip install "google-tunix[prod]==0.1.5"
 !pip install git+https://github.com/google/qwix
 
 # Fix Flax Version to 0.12.0 as required
@@ -592,7 +592,7 @@ rl_cluster = rl_cluster_lib.RLCluster(
 trainer = GRPOLearner(
     rl_cluster=rl_cluster,
     reward_fns=[structure_reward, math_correctness_reward, code_correctness_reward],
-    algo_config=grpo_config,
+    config=grpo_config,
 )
 
 # Data Formatting & Training
