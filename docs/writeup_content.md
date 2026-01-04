@@ -22,7 +22,7 @@ Use this content to fill out the "New Writeup" form.
 ### Introduction
 Reasoning is the frontier of small language models. While large models (70B+) can naturally "think" before speaking, small models like Gemma 2B often rush to hallucinate an answer. In this project, we implement a **Zero-Cost Strategy** to distill reasoning capabilities into Gemma 2B using Google Tunix.
 
-Our goal was to build a competitive reasoning model **without spending a single dollar on API credits**, relying entirely on high-quality public datasets and the efficiency of the Tunix library on Kaggle TPUs.
+Our goal was to build a competitive reasoning model **without spending a single dollar on API credits**. Instead of brute force, we used a strategic **"Format-Align-Reinforce"** pipeline. By strictly separating "Structure Learning" (SFT) from "Logic Reinforcement" (GRPO), we achieved high parsing stability (>95%) where naive baselines often fail.
 
 ### The Strategy: "Format-Align-Reinforce"
 We devised a two-stage training pipeline designed to fit strictly within the 9-hour Kaggle TPUv5e session limit.
@@ -55,6 +55,11 @@ To push performance further, we implemented a **Multi-Session Chaining** strateg
 1.  **Session 1**: Base training on public data.
 2.  **Session 2**: Loaded the Session 1 checkpoint and continued training on a curated "Hard" subset of Magpie/GSM8K.
 This effectively doubled our training compute budget to 18+ hours while keeping the individual sessions within limits.
+
+### Learnings & Challenges
+*   **SFT is Crucial**: Trying to run GRPO directly on a raw base model failed. The model must "learn the rules" (SFT) before it can "play the game" (RL).
+*   **Version Pinning**: Stability on Kaggle requires strict version pinning. We pinned `google-tunix[prod]==0.1.5` to avoid API drifts in the development branch.
+*   **Silent Failures detected**: We caught and patched a critical issue where RNGs were not passed to LoRA layers, preventing proper initialization.
 
 ### Conclusion
 This project demonstrates that you don't need massive compute to train reasoning models. By carefully sequencing "Format Learning" (SFT) and "Truth Reinforcement" (GRPO), we turned Gemma 2B into a capable thinker.

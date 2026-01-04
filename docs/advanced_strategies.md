@@ -66,6 +66,35 @@ def rubric_reward_creative(prompts, completions, **kwargs):
 3.  **Retrain**: Treat that best answer as the new "Ground Truth" for SFT.
 4.  **Repeat**.
 
+## 6. Agentic Reasoning (The "Thinking" Loop) - *Competitive Edge*
+**Concept**: Use `AgenticGRPOLearner` (v0.1.4+) to enable multi-turn reasoning where the model can "act" (e.g., run code, search memory) and "observe" results before answering.
+**Why**: Solves harder math/code problems by verifying intermediate steps. **This is how we beat models that only "guess" once.**
+**Implementation**:
+1.  **Learner**: Swap `GRPOLearner` for `tunix.rl.experimental.agentic_grpo_learner.AgenticGRPOLearner`.
+2.  **Tools**: Define python functions (e.g., `calculator()`) the model can invoke.
+3.  **Format**: Requires training heavily on tool-use trajectories (e.g., from `NuminaMath` dataset).
+
+## 7. Throughput Optimization (SGLang & vLLM) - *Speed Edge*
+**Concept**: Replace the vanilla JAX sampler with specialized inference engines provided in Tunix v0.1.4+.
+**Features**:
+*   **SGLang Sampler**: Drastically reduces sampling overhead during the "Act" phase of RL.
+*   **vLLM Data Parallelism**: Allows running evaluations on much larger batch sizes.
+**Goal**: Fit **2-3x more GRPO steps** into the 9-hour window, allowing convergence where others timeout.
+**Status**: Requires manual installation of `vLLM` or `sglang` in the setup cell (see `project.optional-dependencies` in `pyproject.toml`).
+
+## 8. Performance Profiling (The Diagnostics)
+**Concept**: Use `tunix.perf.trace.PerfTracer` (v0.1.4+) to visualize exactly where TPU time is spent (e.g., Compilation vs Generation vs Training).
+**Why**: In a constrained 9-hour run, knowing bottleneck allows targeted optimization (e.g., "Generation is slow -> Switch to SGLang" vs "Update is slow -> Increase Micro Batch").
+**Implementation**:
+```python
+from tunix.perf import trace
+tracer = trace.PerfTracer(devices=jax.devices())
+# Wrap critical loops
+with tracer.span("rollout"):
+    # ... code ...
+tracer.export() # Saves a chrome-tracing compatible JSON
+```
+
 ---
 
 # Evaluation & "Judgement" Strategy

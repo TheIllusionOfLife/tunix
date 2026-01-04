@@ -12,7 +12,7 @@
 
 ---
 
-## Period 1: The "Safety Net" (Ends Today)
+## Period 1: The "Safety Net" (Current Status: Executing)
 **Goal**: A submitted, valid Single Session entry.
 *   **Activity**: Run `tunix_zero_cost_train.ipynb` **successfully** end-to-end.
 *   **Why**: If you run out of time later or hit bugs, you need *something* on the leaderboard.

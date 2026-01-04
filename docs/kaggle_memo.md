@@ -16,7 +16,7 @@
     *   Go to Kaggle -> Code -> New Notebook.
     *   File -> Import Notebook -> Upload `tunix_zero_cost_train.ipynb`.
 2.  **Configure Accelerator**:
-    *   Session Options -> Accelerator -> **TPU VM v3-8** (Required for Tunix).
+    *   Session Options -> Accelerator -> **TPU VM v5e-8** (Required for Tunix).
     *   Session Options -> Persistence -> Files only (optional, good for saving checkpoints).
 
 ## 3. Run Training

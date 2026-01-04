@@ -16,10 +16,11 @@ To satisfy the "Use private data" requirement without spending money, we will cu
     Keep only samples with `difficulty` > "medium" or long reasoning traces (> 500 words).
 3.  **Save as `private_hard_reasoning.jsonl`**.
 4.  **Upload to Kaggle**:
-    *   Go to Kaggle -> Datasets -> New Dataset.
-    *   Upload `private_hard_reasoning.jsonl`.
     *   Name it: `tunix-private-hard-reasoning`.
     *   **Keep it Private**.
+
+### Strategic Edge:
+**Why do this?** Most competitors will just train for *more epochs* on the same easy data. By filtering for the top 5% hardest problems, we are effectively performing "Curriculum Learning," simulating the distillation process of a much larger model. This is how we win the 15pts.
 
 *(Note: If you don't want to run scripts locally, you can skip this and just use the "Checkpoint Chaining" step below. The private data is optional "to push the envelope".)*
 

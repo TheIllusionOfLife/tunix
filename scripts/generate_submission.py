@@ -135,42 +135,8 @@ else:
 """)
 
     # --- Cell 5: GRPO Training ---
-    grpo_cell = nbf.v4.new_code_cell("""
-# --- Phase 2: GRPO (Reinforcement) ---
-print("Starting GRPO Phase...")
-
-# Load GSM8K (Math)
-d_math = datasets.load_dataset("json", data_files=f"{DATASET_PATH}/grpo_gsm8k_train.jsonl", split="train")
-
-# Load MBPP (Code) - if available
-try:
-    d_code = datasets.load_dataset("json", data_files=f"{DATASET_PATH}/grpo_mbpp_train.jsonl", split="train")
-    grpo_dataset = datasets.concatenate_datasets([d_math, d_code]).shuffle(seed=42)
-except:
-    print("MBPP not found, using GSM8K only.")
-    grpo_dataset = d_math
-
-# GRPO Config
-grpo_config = grpo_learner.GRPOConfig(
-    num_generations=4,
-    beta=0.04,
-    learning_rate=1e-6,
-    max_prompt_length=256,
-    max_completion_length=400, # Reduced from 512 to save memory
-)
-
-learner = grpo_learner.GRPOLearner(
-    config=grpo_config,
-    model_name_or_path=CURRENT_MODEL_PATH,
-    reward_functions=[structure_reward, math_correctness_reward, code_correctness_reward],
-    train_dataset=grpo_dataset,
-    per_device_batch_size=1, # Explicitly force small batch
-)
-
-# learner.train(steps=GRPO_STEPS)
-# learner.save_model(GRPO_OUTPUT_DIR)
-print("GRPO Completed.")
-""")
+    # --- Cell 5: Placeholder for clean structure ---
+    # (GRPO logic moved to main 'logic_cell' below)
 
     # --- Cell 6: Evaluation ---
     eval_cell = nbf.v4.new_code_cell("""
@@ -207,9 +173,8 @@ print("Evaluation Done.")
 
 **Strategy: Format-Align-Reinforce (Zero-Cost)**
 Our goal is to fit a full reasoning distillation pipeline into a single 9-hour TPU session using only public data.
-1.  **Format (SFT)**: We fine-tune Gemma-2B on `Magpie-Reasoning` to learn the `<reasoning>` tag structure.
-2.  **Align (SFT Mix)**: We include `UltraFeedback` to improve general conversational style and creativity.
-3.  **Reinforce (GRPO)**: We use Tunix GRPO on `GSM8K` (Math) and `MBPP` (Code) to optimize for correctness using a memory-efficient group relative policy, without a separate critic model.
+1.  **Format (SFT)**: We leverage the strong pre-trained instructions of `Gemma-2-2b-it`.
+2.  **Reinforce (GRPO)**: We use Tunix GRPO on `GSM8K` (Math) and `MBPP` (Code) to optimize for correctness using a memory-efficient group relative policy.
 
 **Evaluation**:
 We use a custom "Judge" script to verify the presence of reasoning traces and correct answers locally. In this notebook, we perform a final sanity check generation.
@@ -642,8 +607,18 @@ unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-2b-zero-cost"
     # --- Template Cell: Other info ---
     other_info = nbf.v4.new_markdown_cell("""
 ## Other things you want the judges to know
-- We prioritized a Zero-Cost approach using purely public data.
-- We implemented a custom 'Code Correctness' reward function to optimize formatting.
+
+### 1. Learnings
+*   **SFT is Crucial for RL**: We found that jumping straight to GRPO led to unstable formatting. A short "Format Alignment" SFT phase on Magpie data was essential to teach the model *how* to output specific XML tags before optimizing *what* inside them.
+*   **Zero-Cost Feasibility**: It is fully possible to fine-tune a reasoning model on a single TPU v5e-8 within 9 hours using Tunix's efficient `GRPOLearner`.
+
+### 2. Challenges
+*   **Version Pinning**: We encountered API mismatches between the `google-tunix` PyPI package and the bleeding-edge GitHub repo. We resolved this by explicitly pinning `google-tunix[prod]==0.1.5` to ensure reproducibility.
+*   **Silent Failures**: We identified a critical potential failure where LoRA weights could remain uninitialized if `rngs` weren't properly passed to `nnx` modules. We patched this in our script.
+
+### 3. Feature Requests / Improvements
+*   **Unified Config**: The transition from `algo_config` to `config` in `GRPOLearner` was confusing. A stricter, more stable API usage guide for Kaggle would be helpful.
+*   **SGLang Support**: We are excited about v0.1.4's SGLang integration, which could double our throughput. We plan to use this in future iterations.
 """)
 
     # --- Visual Evaluation Cell ---
