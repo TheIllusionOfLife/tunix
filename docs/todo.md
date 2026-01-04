@@ -42,5 +42,6 @@ This file orchestrates the execution plan across all specific documentation. Use
 ## 🎬 Phase 4: Final Submission
 *Goal: Maximize Subjective Points (55pts Total).*
 
+- [ ] **Agentic Verification**: Use `scripts/evaluation_judge.py` (or ask Antigravity) to audit 10 random samples.
 - [ ] **Notebook Polish**: Add ASCII flowcharts to `tunix_zero_cost_train.ipynb` intro.
 - [ ] **Video**: Focus on the *Failure vs Success* demo (Before/After).

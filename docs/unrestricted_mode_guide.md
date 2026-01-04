@@ -20,7 +20,10 @@ To satisfy the "Use private data" requirement without spending money, we will cu
     *   **Keep it Private**.
 
 ### Strategic Edge:
-**Why do this?** Most competitors will just train for *more epochs* on the same easy data. By filtering for the top 5% hardest problems, we are effectively performing "Curriculum Learning," simulating the distillation process of a much larger model. This is how we win the 15pts.
+**Why Hard Reasoning? (vs Fixing Weaknesses)**
+You might ask: *"Why not use this phase to fix Creative Writing?"*
+*   **Cost vs ROI**: Creative styling is "cheap" to learn (we fix it in Phase 2 with UltraFeedback). Deep Reasoning is "expensive" (needs thousands of steps).
+*   **The Unrestricted Advantage**: We use the extra compute budget for the *expensive* task (Reasoning Curriculum), which lifts performance across ALL domains (Math, Code, and Logic). Using it for easy tasks would be a waste of the bonus session.
 
 *(Note: If you don't want to run scripts locally, you can skip this and just use the "Checkpoint Chaining" step below. The private data is optional "to push the envelope".)*
 

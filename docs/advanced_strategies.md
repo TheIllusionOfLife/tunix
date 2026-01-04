@@ -60,11 +60,12 @@ def rubric_reward_creative(prompts, completions, **kwargs):
 
 ## 5. Iterative Self-Improvement (The Feedback Loop)
 **Concept**: Use the model's own best outputs to retrain itself.
-**Cycle**:
-1.  **Generate**: Model generates 10 answers per prompt.
-2.  **Filter**: Use a "Judge" (e.g., Code Executor or Rubric) to find the single best answer.
-3.  **Retrain**: Treat that best answer as the new "Ground Truth" for SFT.
-4.  **Repeat**.
+**Implementation (Zero-Cost)**:
+1.  **Generate**: Run inference on 100 prompts.
+2.  **Judge**: Use `scripts/evaluation_judge.py` (Human or LLM mode) to score them.
+3.  **Filter**: Keep only samples with Score > 0.8.
+4.  **Retrain**: Add high-scoring samples to your SFT dataset.
+**Status**: Tool Implemented (`LocalLLMJudge`).
 
 ## 6. Agentic Reasoning (The "Thinking" Loop) - *Competitive Edge*
 **Concept**: Use `AgenticGRPOLearner` (v0.1.4+) to enable multi-turn reasoning where the model can "act" (e.g., run code, search memory) and "observe" results before answering.

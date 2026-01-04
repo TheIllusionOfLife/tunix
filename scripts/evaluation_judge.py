@@ -100,8 +100,67 @@ class EvaluationJudge:
         print("\n--- Strategy Recommendation ---")
         print(f"Your weakest area is {lowest_cat}. Increase dataset size or weight for {lowest_cat}.")
 
+
+# --- Advanced Judges ---
+
+class HumanJudge:
+    def evaluate(self, prompt, completion, expected=None):
+        print(f"\n{'='*40}")
+        print(f"PROMPT: {prompt[:200]}...")
+        print(f"{'-'*20}")
+        print(f"MODEL OUTPUT:\n{completion}")
+        print(f"{'-'*20}")
+        if expected: print(f"EXPECTED: {expected}")
+        
+        while True:
+            try:
+                score = input("Rate this (0.0 - 1.0): ")
+                return float(score)
+            except ValueError:
+                print("Invalid number. Try again.")
+
+class LocalLLMJudge:
+    """
+    Placeholder for connecting to local Ollama or just generating a prompt 
+    for the user to paste into ChatGPT.
+    """
+    def generate_judge_prompt(self, prompt, completion):
+        return (
+            f"You are a strict evaluator. Rate the following response to the prompt on a scale of 0.0 to 1.0.\n"
+            f"PROMPT: {prompt}\nRESPONSE: {completion}\n"
+            f"Criteria: Correctness, Reasoning Depth, XML Formatting.\n"
+            f"Output ONLY the numeric score."
+        )
+
+def run_interactive_judge(filename):
+    import json
+    judge = HumanJudge()
+    scores = []
+    
+    print(f"Loading {filename} for Manual Review...")
+    with open(filename, 'r') as f:
+        data = [json.loads(line) for line in f]
+        
+    for i, entry in enumerate(data[:10]): # Limit to 10 for sanity
+        prompt = entry.get('prompt', entry.get('text', ''))
+        # Simulator: In real usage, this would be the model's generation.
+        # Here we just show the data itself for review
+        completion = entry.get('answer', '(No answer in dataset)')
+        
+        print(f"\n[Sample {i+1}/10]")
+        s = judge.evaluate(prompt, completion)
+        scores.append(s)
+        
+    avg = sum(scores)/len(scores)
+    print(f"\nFinal Manual Score: {avg:.2f}")
+
 if __name__ == "__main__":
-    judge = EvaluationJudge()
+    import sys
+    if len(sys.argv) > 1:
+        run_interactive_judge(sys.argv[1])
+    else:
+        # Default Test
+        judge = EvaluationJudge()
     
     # Mock Data Test
     samples = [
