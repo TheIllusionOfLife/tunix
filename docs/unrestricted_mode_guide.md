@@ -2,85 +2,93 @@
 
 This guide explains how to win the extra 15 points for "Model quality across multiple Kaggle sessions".
 
-**Goal**: Train a stronger model by bypassing the 9-hour limit and using a custom "Private Dataset".
+**Goal**: Train a stronger model by chaining sessions and using your private "Hard Reasoning" dataset.
 
 ---
 
-## Step 1: Create a "Private" Dataset (The "Secret Sauce")
-To satisfy the "Use private data" requirement without spending money, we will curate a **"Hardest Problems"** dataset from public sources. This counts as "private" because you are uploading your own custom-filtered file that doesn't exist publicly in that exact form.
+## Prerequisites
 
-### Action Plan:
-1.  **Download the Full Magpie Dataset** (on your local machine):
-    It has ~300k samples. We only used 5k for the main submission.
-2.  **Filter for "Hard" Math**:
-    Keep only samples with `difficulty` > "medium" or long reasoning traces (> 500 words).
-3.  **Save as `private_hard_reasoning.jsonl`**.
-4.  **Upload to Kaggle**:
-    *   Name it: `tunix-private-hard-reasoning`.
-    *   **Keep it Private**.
-
-### Strategic Edge:
-**Why Hard Reasoning? (vs Fixing Weaknesses)**
-You might ask: *"Why not use this phase to fix Creative Writing?"*
-*   **Cost vs ROI**: Creative styling is "cheap" to learn (we fix it in Phase 2 with UltraFeedback). Deep Reasoning is "expensive" (needs thousands of steps).
-*   **The Unrestricted Advantage**: We use the extra compute budget for the *expensive* task (Reasoning Curriculum), which lifts performance across ALL domains (Math, Code, and Logic). Using it for easy tasks would be a waste of the bonus session.
-
-*(Note: If you don't want to run scripts locally, you can skip this and just use the "Checkpoint Chaining" step below. The private data is optional "to push the envelope".)*
+| Asset | Status | Location |
+|:---|:---:|:---|
+| `tunix_zero_cost_train.ipynb` | ✅ | Main track notebook (Session 1) |
+| `tunix_continuation.ipynb` | ✅ | Continuation notebook (Session 2+) |
+| `private_hard_reasoning.jsonl` | ✅ | `data/` folder (upload separately) |
 
 ---
 
-## Step 2: Session 1 - The Base Training
-**Objective**: Train your initial SFT + GRPO model and **save the weights**.
+## Step 1: Upload Datasets to Kaggle
 
-1.  Open your `tunix_zero_cost_train.ipynb`.
-2.  **Config**:
-    ```python
-    PRETRAINED_PATH = None
-    SFT_STEPS = 400
-    GRPO_STEPS = 400
-    SAVE_FINAL_PATH = "tunix_session1_checkpoint"
-    ```
-3.  **Run the Notebook**.
-4.  **IMPORTANT**: After the run finishes, go to the **"Output"** tab of the notebook viewer.
-5.  Click **"Create New Dataset"** from the output files.
-    *   Name it: `tunix-session1-checkpoint`.
-    *   This saves your trained model weights as a dataset we can load later.
+### Public Data (for Session 1):
+**Dataset Name**: `tunix-public-data`
+**Contents**:
+- `sft_magpie.jsonl`
+- `sft_ultrafeedback.jsonl`
+- `grpo_gsm8k_train.jsonl`
+- `grpo_mbpp_train.jsonl`
 
----
-
-## Step 3: Session 2 - The "Unrestricted" Training
-**Objective**: Load the Session 1 model and train *more* using your Private Data.
-
-1.  **Create a NEW Notebook** (e.g., `tunix_unrestricted_phase2`).
-2.  **Add Data**:
-    *   Add Data -> Your `tunix-session1-checkpoint` dataset.
-    *   Add Data -> Your `tunix-private-hard-reasoning` dataset.
-3.  **Modify Config**:
-    ```python
-    # Path to the model from Session 1 (Kaggle mounts datasets at /kaggle/input/...)
-    PRETRAINED_PATH = "/kaggle/input/tunix-session1-checkpoint/sft_checkpoint" 
-    
-    # Point to your private data for extra training
-    PRIVATE_DATA_PATH = "/kaggle/input/tunix-private-hard-reasoning/private_hard_reasoning.jsonl"
-    
-    # Increase steps since we basically have a fresh 9 hours!
-    SFT_STEPS = 0    # Skip SFT if satisfy with Session 1, or do small epoch on Private Data
-    GRPO_STEPS = 800 # Focus heavily on Reinforcement Learning
-    ```
-4.  **Run Training**.
-5.  **Submit**:
-    *   The model from *this* session is your final "Unrestricted" entry.
-    *   Make sure to grab the **Model ID** (e.g., upload the output as a Model: `yuyamukai/tunix-unrestricted-final`).
+### Private Data (for Session 2+):
+**Dataset Name**: `tunix-private-hard-reasoning`
+**Contents**:
+- `private_hard_reasoning.jsonl`
+**Visibility**: **Private**
 
 ---
 
-## Step 4: Submission Requirement
-At the bottom of your **Session 2 Notebook**, you must add a text cell:
+## Step 2: Session 1 - Base Training
 
-```markdown
-## Unrestricted Mode Submission
-**Final Model ID**: https://www.kaggle.com/models/yuyamukai/tunix-unrestricted-final
-**Strategy**: 
-1. Session 1: SFT+GRPO on Public Data (Magpie/GSM8K).
-2. Session 2: Loaded Checkpoint -> GRPO on Private "Hard" Dataset.
+1. Open `tunix_zero_cost_train.ipynb` on Kaggle.
+2. Attach dataset: `tunix-public-data`.
+3. Run the notebook (9h limit).
+4. After completion, download `final_submission_model/` from Output.
+5. Upload as Kaggle Dataset: `tunix-session1-checkpoint`.
+
+---
+
+## Step 3: Session 2 - Continuation Training
+
+1. Open `tunix_continuation.ipynb` on Kaggle.
+2. Attach datasets:
+   - `tunix-session1-checkpoint`
+   - `tunix-private-hard-reasoning`
+3. Update config cell:
+   ```python
+   PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session1-checkpoint/checkpoint"
+   DATA_DATASET = "/kaggle/input/tunix-private-hard-reasoning"
+   ```
+4. Run the notebook.
+5. Download output → Upload as `tunix-session2-checkpoint`.
+
+---
+
+## Step 4: Session 3+ (Optional)
+
+Repeat Session 2 with updated checkpoint path:
+
+```python
+PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session2-checkpoint/checkpoint"
 ```
+
+---
+
+## Step 5: Final Submission
+
+1. After final session, **upload output as Kaggle Model**:
+   - Go to Kaggle → Models → New Model
+   - Upload `final_continuation_model/` contents
+   - Set visibility: Public
+   - Note the Model ID (e.g., `yuyamukai/tunix-gemma2-2b-unrestricted`)
+
+2. Update `unrestricted_kaggle_model` in your submission notebook:
+   ```python
+   unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-2b-unrestricted"
+   ```
+
+---
+
+## Summary
+
+| Session | Notebook | Input Data | Output |
+|:---|:---|:---|:---|
+| 1 | `tunix_zero_cost_train.ipynb` | Public data | `tunix-session1-checkpoint` |
+| 2 | `tunix_continuation.ipynb` | Private hard data | `tunix-session2-checkpoint` |
+| 3+ | `tunix_continuation.ipynb` | Private hard data | Final Kaggle Model |

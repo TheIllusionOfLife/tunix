@@ -1,47 +1,58 @@
 # Tunix Zero-Cost Challenge: Master TODO
 
-This file orchestrates the execution plan across all specific documentation. Use this as your command center.
+This file orchestrates the execution plan across all specific documentation.
 
 ## 📚 Documentation Index
-## 📚 Documentation Index
-*   **Strategy**: [Winning Assessment (Max Score)](scoring_breakdown.md) | [Advanced Strategies](advanced_strategies.md)
-*   **Execution**: [Kaggle Run Memo](kaggle_memo.md) | [TPU Resource Plan](tpu_resource_plan.md)
+*   **Strategy**: [Scoring Breakdown](scoring_breakdown.md) | [Advanced Strategies](advanced_strategies.md)
+*   **Execution**: [Kaggle Memo](kaggle_memo.md) | [TPU Resource Plan](tpu_resource_plan.md)
 *   **Submission**: [Unrestricted Guide](unrestricted_mode_guide.md) | [Writeup Content](writeup_content.md) | [Video Script](video_script.md)
 
 ---
 
-## ✅ Phase 1: The Safety Net (Current)
-*Status: Executing on Kaggle (TPU v5e-8)*
-*> Competitive Edge: XML Structure Reward ensures >95% parse rate (vs. naive models failing format).*
+## 🗂️ Pre-Run: Dataset Setup
 
-- [ ] **Monitor Run**: Ensure `tunix_zero_cost_train.ipynb` completes (9h limit).
-- [ ] **Quality Gate**: Verify `submission.csv` outputs STRICT `<reasoning>` tags. (If <90% valid, we fail).
-- [ ] **Create Dataset**: Save output as `tunix-session1-checkpoint`.
+- [ ] **Delete old `tunix-public-data`** on Kaggle (if exists).
+- [ ] **Create new `tunix-public-data`** dataset with:
+    - `sft_magpie.jsonl`
+    - `sft_ultrafeedback.jsonl`
+    - `grpo_gsm8k_train.jsonl`
+    - `grpo_mbpp_train.jsonl`
+    - ⚠️ **DO NOT include** `private_hard_reasoning.jsonl`
+- [ ] **Create `tunix-private-hard-reasoning`** dataset (Private) with:
+    - `private_hard_reasoning.jsonl`
 
-## 🧠 Phase 2: Advanced Optimization (The "Veteran" Move)
-*Goal: Outperform on throughput and reasoning depth.*
-*> Competitive Edge: SGLang = 2x Training Steps. Agentic = Self-Correction.*
+---
 
-- [ ] **Domain Coverage**: Add `UltraFeedback` or `HelpSteer` to training mix.
-    *   *Why*: Competition evaluates "Creative Writing" & "Summarization". Current model is Math/Code only.
-- [ ] **Agentic Upgrade**: Swap `GRPOLearner` for `tunix.rl.experimental.agentic_grpo_learner.AgenticGRPOLearner`.
-- [ ] **Speed Upgrade**: Enable `SGLang` sampler for faster rollouts.
-- [ ] **Profiling**: Trigger `PerfTracer` to prove efficiency in Notebook Writeup.
+## ✅ Phase 1: Main Track Submission (45 pts)
 
-## 🚀 Phase 3: Unrestricted Mode (The "Whale" Strategy)
-*Goal: Use "Private Data" to simulate a 70B teacher.*
-*> Competitive Edge: Training on "Hardest 5%" of Magpie data (Quality > Quantity).*
+- [ ] **Run `tunix_zero_cost_train.ipynb`** on Kaggle TPU.
+- [ ] **Verify Output**: Check `<reasoning>` tags in generated samples.
+- [ ] **Save Checkpoint**: Download `final_submission_model/` from Output.
+- [ ] **Upload as Dataset**: Name it `tunix-session1-checkpoint` (for Unrestricted Mode).
 
-- [x] **Data Curation**: Upload "Private Hard" dataset (Done: `private_hard_reasoning`).
-- [ ] **Chain Sessions**: Train Phase 3 model ON TOP of Phase 2 model.
-- [ ] **Publish Model**: `yuyamukai/tunix-unrestricted-final`.
-- [ ] **Update Notebook**:
-    - [ ] Set `unrestricted_kaggle_model`.
-    - [ ] Writeup: Explain "Curriculum Learning" (Easy -> Hard).
+---
 
-## 🎬 Phase 4: Final Submission
-*Goal: Maximize Subjective Points (55pts Total).*
+## 🚀 Phase 3: Unrestricted Mode (15 bonus pts)
 
-- [ ] **Agentic Verification**: Use `scripts/evaluation_judge.py` (or ask Antigravity) to audit 10 random samples.
-- [ ] **Notebook Polish**: Add ASCII flowcharts to `tunix_zero_cost_train.ipynb` intro.
-- [ ] **Video**: Focus on the *Failure vs Success* demo (Before/After).
+**Notebook**: `tunix_continuation.ipynb`
+
+### Session 2:
+- [ ] Update config: `PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session1-checkpoint/checkpoint"`
+- [ ] Run notebook on Kaggle TPU.
+- [ ] Download output → Upload as `tunix-session2-checkpoint`.
+
+### Session 3 (if needed):
+- [ ] Update config: `PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session2-checkpoint/checkpoint"`
+- [ ] Run notebook.
+- [ ] Download output → Upload as **Kaggle Model**: `yuyamukai/tunix-gemma2-2b-unrestricted`
+
+### Final Step:
+- [ ] Update `unrestricted_kaggle_model` in `tunix_zero_cost_train.ipynb` with final Model ID.
+
+---
+
+## 🎬 Phase 4: Final Submission Bundle
+
+- [ ] **Video**: Record using `docs/video_script.md` (< 3 min).
+- [ ] **Writeup**: Submit on Kaggle using `docs/writeup_content.md`.
+- [ ] **Attach**: Notebook + Video to Writeup.

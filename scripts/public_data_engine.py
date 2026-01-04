@@ -3,6 +3,7 @@ import os
 import json
 import logging
 from typing import List, Dict, Optional
+import pandas as pd
 from datasets import load_dataset
 from tqdm.auto import tqdm
 
@@ -120,36 +121,30 @@ class PublicDataEngine:
 
     def prepare_ultrafeedback_sft(self, num_samples: int = 1000):
         """
-        Loads UltraFeedback to add diverse conversational/creative data to SFT.
-        This helps with 'Creative writing', 'Summarization', etc.
+        Loads UltraFeedback via direct Parquet to avoid datasets library issues.
         """
-        logger.info(f"Loading UltraFeedback (subset: {num_samples})...")
+        logger.info(f"Loading UltraFeedback (subset: {num_samples}) via Pandas...")
         try:
-            ds = load_dataset("HuggingFaceH4/ultrafeedback_binarized", split="train_sft")
-            ds = ds.shuffle(seed=42).select(range(num_samples))
+            url = "https://huggingface.co/datasets/HuggingFaceH4/ultrafeedback_binarized/resolve/main/data/train_sft-00000-of-00001.parquet"
+            # Read parquet directly using pyarrow/fastparquet backend
+            df = pd.read_parquet(url)
+            df = df.sample(n=min(len(df), num_samples), random_state=42)
             
             output_file = os.path.join(self.output_dir, "sft_ultrafeedback.jsonl")
             
             with open(output_file, 'w') as f:
-                for row in ds:
-                    # UltraFeedback has 'messages' list: [{'role': 'user', 'content':...}, {'role': 'assistant', ...}]
+                for _, row in df.iterrows():
+                    # Parquet usually returns numpy arrays or lists for 'messages'
                     messages = row['messages']
+                    # Ensure it's a list (numpy array conversion might be needed)
+                    if not isinstance(messages, list):
+                        messages = list(messages)
+                        
                     if len(messages) < 2: continue
                     
                     user_content = messages[0]['content']
-                    # We use the 'chosen' response implicitly (train_sft split usually has high quality)
                     assist_content = messages[1]['content']
                     
-                    # Wrap in our reasoning format (even if empty reasoning, to keep schema consistent)
-                    # Or relying on the model to just output answer if no reasoning is needed for creative tasks.
-                    # For consistency, we'll format it as a direct answer or wrap in tags if we had reasoning.
-                    # Since UF doesn't have explicit reasoning traces, we just use standard chat format
-                    # But wait, our SFT trainer expects <reasoning> tags? 
-                    # Actually, for diversity, we might NOT want to force reasoning on everything (e.g. poetry).
-                    # However, to keep the pipeline simple, we will treat the entire response as the <answer>.
-                    
-                    # Assuming CHAT_TEMPLATE is used for the prompt part
-                    # And then the assistant's response is wrapped as an answer.
                     final_text = (
                         CHAT_TEMPLATE.format(instruction=user_content) +
                         f"{ANSWER_START}{assist_content}{ANSWER_END}"
@@ -164,19 +159,21 @@ class PublicDataEngine:
 
     def prepare_mbpp_grpo(self, split: str = "train"):
         """
-        Loads MBPP (Mostly Basic Python Problems) for Coding GRPO.
+        Loads MBPP via direct JSONL to avoid script execution issues.
         """
-        logger.info(f"Loading MBPP ({split})...")
+        logger.info(f"Loading MBPP ({split}) via Pandas...")
         try:
-            ds = load_dataset("google-research-datasets/mbpp", split=split)
+            # MBPP usually has a 'mbpp.jsonl' in base
+            url = "https://huggingface.co/datasets/google-research-datasets/mbpp/resolve/main/mbpp.jsonl"
+            df = pd.read_json(url, lines=True)
             
             output_file = os.path.join(self.output_dir, f"grpo_mbpp_{split}.jsonl")
             
             with open(output_file, 'w') as f:
-                for row in ds:
+                for _, row in df.iterrows():
                     prompt = row['text']
                     code = row['code']
-                    tests = row['test_list']
+                    tests = row.get('test_list', [])
                     
                     entry = {
                         "prompt": CHAT_TEMPLATE.format(instruction=f"Write a Python function to solve: {prompt}"),
@@ -185,7 +182,7 @@ class PublicDataEngine:
                     }
                     f.write(json.dumps(entry) + "\n")
                     
-            logger.info(f"Saved {len(ds)} MBPP samples to {output_file}")
+            logger.info(f"Saved {len(df)} MBPP samples to {output_file}")
             
         except Exception as e:
             logger.error(f"Error preparing MBPP: {e}")
