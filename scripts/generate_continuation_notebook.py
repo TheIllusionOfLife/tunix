@@ -78,6 +78,7 @@ import gc
 import re
 import time
 import json
+import ast
 
 import jax
 import jax.numpy as jnp
@@ -263,15 +264,20 @@ def code_correctness_reward(prompts, completions, answer, **kwargs):
     rewards = []
     for c, gt in zip(completions, answer):
         try:
-            match = re.search(r"<answer>(.*?)</answer>", c, re.DOTALL)
-            if match:
-                extracted = match.group(1).strip()
-                if gt.strip() in extracted or extracted in gt.strip():
-                    rewards.append(1.0)
-                else:
-                    rewards.append(0.0)
+            # First try to extract from <answer> tags
+            ans_match = re.search(r"<answer>(.*?)</answer>", c, re.DOTALL)
+            if ans_match:
+                code_str = ans_match.group(1).strip()
             else:
-                rewards.append(0.0)
+                code_str = c.strip()
+            
+            # Check syntax validity
+            ast.parse(code_str)
+            # Check if ground truth is contained
+            if gt.strip() in code_str or code_str in gt.strip():
+                rewards.append(1.0)
+            else:
+                rewards.append(0.5)  # Valid syntax but different from GT
         except:
             rewards.append(0.0)
     return rewards
@@ -282,11 +288,9 @@ try:
     grpo_dataset = datasets.load_dataset("json", data_files=hard_data_file, split="train")
     print(f"Loaded {len(grpo_dataset)} hard reasoning samples.")
 except Exception as e:
-    print(f"Failed to load dataset: {e}")
-    grpo_dataset = datasets.Dataset.from_dict({
-        "question": ["What is the capital of France?"],
-        "answer": ["Paris"]
-    })
+    print(f"CRITICAL: Failed to load dataset: {e}")
+    print(f"Please ensure '{DATA_DATASET}' is attached with required files.")
+    raise RuntimeError(f"Dataset loading failed. Cannot proceed without data. Error: {e}")
 
 # Optimizer
 schedule = optax.warmup_cosine_decay_schedule(

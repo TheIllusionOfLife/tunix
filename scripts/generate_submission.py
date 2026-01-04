@@ -172,10 +172,10 @@ print("Evaluation Done.")
     strategy_cell = nbf.v4.new_markdown_cell("""
 ## Your overall training and evaluation strategy
 
-**Strategy: Format-Align-Reinforce (Zero-Cost)**
-Our goal is to fit a full reasoning distillation pipeline into a single 9-hour TPU session using only public data.
-1.  **Format (SFT)**: We leverage the strong pre-trained instructions of `Gemma-2-2b-it`.
-2.  **Reinforce (GRPO)**: We use Tunix GRPO on `GSM8K` (Math) and `MBPP` (Code) to optimize for correctness using a memory-efficient group relative policy.
+**Strategy: GRPO on Pre-Trained IT Model (Zero-Cost)**
+Our goal is to fit a reasoning enhancement pipeline into a single 9-hour TPU session using only public data.
+1.  **Base Model**: We leverage the strong pre-trained instruction-tuning of `Gemma-2-2b-it` (no additional SFT needed).
+2.  **Reinforce (GRPO)**: We use Tunix GRPO on `GSM8K` (Math) and `MBPP` (Code) to optimize for correctness using structure rewards that enforce XML tags.
 
 **Evaluation**:
 We use a custom "Judge" script to verify the presence of reasoning traces and correct answers locally. In this notebook, we perform a final sanity check generation.
@@ -183,11 +183,11 @@ We use a custom "Judge" script to verify the presence of reasoning traces and co
 ## 🗺️ Workflow Diagram
 ```mermaid
 graph LR
-    A[Public Data] --> B(SFT Phase)
-    B --> C{GRPO Phase}
-    C -->|Math| D[GSM8K]
-    C -->|Code| E[MBPP]
-    D & E --> F[Final Policy]
+    A[Gemma-2B-IT] --> B{GRPO Training}
+    B -->|Math| C[GSM8K]
+    B -->|Code| D[MBPP]
+    C & D --> E[Structure + Correctness Rewards]
+    E --> F[Trained Policy]
     F --> G[Submission]
 ```
 """)
@@ -514,22 +514,34 @@ def math_correctness_reward(prompts, completions, answer, **kwargs):
             rewards.append(0.0)
     return rewards
 
-# 3. Code Correctness: Checks if python code is syntactically valid via AST
+# 3. Code Correctness: Checks if python code is syntactically valid
 import ast
-def code_correctness_reward(prompts, completions, **kwargs):
+def code_correctness_reward(prompts, completions, answer, **kwargs):
     rewards = []
-    for c in completions:
+    for c, gt in zip(completions, answer):
         try:
-            # Extract code block
-            code_match = re.search(r"```python(.*?)```", c, re.DOTALL)
-            if code_match:
-                code_str = code_match.group(1)
-                ast.parse(code_str) # Will raise error if invalid syntax
+            # First try to extract from <answer> tags
+            ans_match = re.search(r"<answer>(.*?)</answer>", c, re.DOTALL)
+            if ans_match:
+                code_str = ans_match.group(1).strip()
+            else:
+                # Fallback: try ```python block
+                code_match = re.search(r"```python(.*?)```", c, re.DOTALL)
+                if code_match:
+                    code_str = code_match.group(1).strip()
+                else:
+                    # Last resort: use the whole completion
+                    code_str = c.strip()
+            
+            # Check syntax validity
+            ast.parse(code_str)
+            # Check if ground truth is contained
+            if gt.strip() in code_str or code_str in gt.strip():
                 rewards.append(1.0)
             else:
-                rewards.append(0.0) # No code block found
+                rewards.append(0.5)  # Valid syntax but different from GT
         except:
-            rewards.append(0.0) # Syntax error
+            rewards.append(0.0)
     return rewards
 
 # Load Dataset (Robust Path Handling)
@@ -549,12 +561,9 @@ try:
     else:
          grpo_dataset = d_math
 except Exception as e:
-    print(f"Failed to load datasets: {e}")
-    # Fallback to dummy data for smoke testing
-    grpo_dataset = datasets.Dataset.from_dict({
-        "question": ["What is 1+1?", "Write hello world in python."],
-        "answer": ["2", "print('hello world')"]
-    })
+    print(f"CRITICAL: Failed to load datasets: {e}")
+    print(f"Please ensure '{DATASET_PATH}' is attached with the required files.")
+    raise RuntimeError(f"Dataset loading failed. Cannot proceed without data. Error: {e}")
 
 # Optimizer
 # Optimizer with Schedule & Clipping
