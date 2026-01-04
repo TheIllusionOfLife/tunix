@@ -365,9 +365,30 @@ trainer = GRPOLearner(
 # Data Formatting & Training
 with mesh:
     def format_fn(x):
+        # Handle both formats:
+        # - GRPO format: {"prompt": "...", "answer": "..."}  
+        # - SFT format: {"text": "<start_of_turn>user...model...<reasoning>..."}
+        if "prompt" in x:
+            prompt = x["prompt"]
+            answer = x.get("answer", "")
+        else:
+            # Extract prompt from SFT text (split before model's reasoning)
+            text = x["text"]
+            # Find where model starts reasoning
+            if "<start_of_turn>model" in text:
+                prompt = text.split("<start_of_turn>model")[0] + "<start_of_turn>model"
+            else:
+                prompt = text
+            # Extract answer if present
+            if "<answer>" in text and "</answer>" in text:
+                import re
+                match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL)
+                answer = match.group(1).strip() if match else ""
+            else:
+                answer = ""
         return {
-            "prompts": x["prompt"],  # Already formatted in dataset
-            "answer": x.get("answer", "")
+            "prompts": prompt,
+            "answer": answer
         }
     
     train_ds = grpo_dataset.map(format_fn)
