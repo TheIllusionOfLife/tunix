@@ -396,7 +396,7 @@ def get_lora_model(base_model, mesh):
 
   model_input = base_model.get_model_input()
   lora_model = qwix.apply_lora_to_model(
-      base_model, lora_provider, **model_input
+      base_model, lora_provider, rngs=nnx.Rngs(params=0), **model_input
   )
 
   with mesh:
