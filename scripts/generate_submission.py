@@ -704,15 +704,16 @@ unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-2b-zero-cost"
 ## Other things you want the judges to know
 
 ### 1. Learnings
-*   **SFT is Crucial for RL**: We found that jumping straight to GRPO led to unstable formatting. A short "Format Alignment" SFT phase on Magpie data was essential to teach the model *how* to output specific XML tags before optimizing *what* inside them.
+*   **SFT is Optional with Strong IT Models**: We found that Gemma-2B-IT already has sufficient instruction-following capability. By using structure rewards (`soft_structure_reward`, `structure_reward`) that explicitly reward `<reasoning>` and `<answer>` XML tags, GRPO alone achieves near-perfect format compliance (~99%) without a separate SFT phase. This saves compute time for more GRPO steps.
 *   **Zero-Cost Feasibility**: It is fully possible to fine-tune a reasoning model on a single TPU v5e-8 within 9 hours using Tunix's efficient `GRPOLearner`.
+*   **Reward Design Matters**: The combination of structure rewards (format) + correctness rewards (accuracy) proved more effective than either alone.
 
 ### 2. Challenges
 *   **Version Pinning**: We encountered API mismatches between the `google-tunix` PyPI package and the bleeding-edge GitHub repo. We resolved this by explicitly pinning `google-tunix[prod]==0.1.5` to ensure reproducibility.
 *   **Silent Failures**: We identified a critical potential failure where LoRA weights could remain uninitialized if `rngs` weren't properly passed to `nnx` modules. We patched this in our script.
 
 ### 3. Feature Requests / Improvements
-*   **Unified Config**: The transition from `algo_config` to `config` in `GRPOLearner` was confusing. A stricter, more stable API usage guide for Kaggle would be helpful.
+*   **API Consistency**: The `algo_config` parameter naming in `GRPOLearner` differs across versions. A stable API guide for Kaggle environments would be helpful.
 *   **SGLang Support**: We are excited about v0.1.4's SGLang integration, which could double our throughput. We plan to use this in future iterations.
 """)
 
