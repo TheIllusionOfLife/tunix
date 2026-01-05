@@ -412,11 +412,19 @@ try:
 
             # 2. GlaiveAI-Reasoning
             elif "glaive" in fname:
-                # Glaive: instruction/question, output/answer (sometimes with tags, sometimes not)
+                # Glaive: prompt, response (contains <think>...</think> then answer)
                 for sample in ds:
-                    q = sample.get("question", sample.get("instruction", ""))
-                    a = sample.get("answer", sample.get("output", ""))
-                    # Glaive usually has everything in answer, but if not we format standard
+                    q = sample.get("prompt", sample.get("question", sample.get("instruction", "")))
+                    a = sample.get("response", sample.get("answer", sample.get("output", "")))
+                    
+                    # Special handling for Glaive's <think> only format
+                    # If we just force standardized format from raw text, it might miss the answer part if it expects explicit tags
+                    # But standardize_to_gemma_format logic for raw text is:
+                    # extract reasoning from tags (think/Thought/reasoning)
+                    # output rest as answer
+                    # Let's verify standardizer handles this.
+                    # It does: `remaining_text` logic handles extraction.
+                    
                     formatted = standardize_to_gemma_format(a, question=q)
                     all_texts.append({"text": formatted})
 
@@ -449,13 +457,18 @@ try:
                 formatted = standardize_to_gemma_format(response, question=prompt)
                 all_texts.append({"text": formatted})
         
-        # 2. OpenO1-SFT
+            # 2. OpenO1-SFT
         try:
             openo1 = datasets.load_dataset("O1-OPEN/OpenO1-SFT", split="train[:10000]")
             print(f"Downloaded OpenO1: {len(openo1)} samples")
             for sample in openo1:
                 instruction = sample.get("instruction", "")
                 output = sample.get("output", "")
+                
+                # Filter Chinese characters to prevent language leakage
+                if any(u'\u4e00' <= c <= u'\u9fff' for c in instruction + output):
+                    continue
+                    
                 if instruction and output:
                     formatted = standardize_to_gemma_format(output, question=instruction)
                     all_texts.append({"text": formatted})

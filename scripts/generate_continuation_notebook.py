@@ -259,13 +259,40 @@ try:
         q = sample.get("instruction") or sample.get("question")
         a = sample.get("output") or sample.get("answer")
         
+    print(f"Collecting {NUM_SAMPLES} samples...")
+    for sample in tqdm(glaive_ds):
+        if count >= NUM_SAMPLES:
+            break
+            
+        # Glaive uses 'prompt' and 'response'
+        q = sample.get("prompt") or sample.get("question") or sample.get("instruction")
+        a = sample.get("response") or sample.get("output") or sample.get("answer")
+        
         if q and a:
             # Use global SYSTEM_PROMPT defined in Vars Cell (we assume it's available or we redefine strictly)
             # To be safe in a notebook, we'll re-use the variable name if available, else literal.
             # But the Vars cell runs before this.
             
             # Use standardized formatting
-            full_text = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n<answer>{a}</answer>"
+            # Note: Glaive response has <think>... we need to ensure standardize handles it.
+            # Our standardize helper in this file is simple: replace <think> with <reasoning>.
+            # It DOES NOT handle missing <answer> tags for the rest of the text.
+            # We need to enhance the helper inside this notebook generator.
+            
+            # Enhanced standardization for this notebook
+            text = a
+            if "<think>" in text:
+                text = text.replace("<think>", "<reasoning>").replace("</think>", "</reasoning>")
+            
+            # If no <answer> tag, wrap the part after reasoning
+            if "<reasoning>" in text and "<answer>" not in text:
+                 parts = text.split("</reasoning>")
+                 if len(parts) > 1:
+                     reasoning_part = parts[0] + "</reasoning>"
+                     answer_part = parts[1].strip()
+                     text = f"{reasoning_part}\\n<answer>{answer_part}</answer>"
+            
+            full_text = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n{text}"
             
             training_samples.append({"text": full_text})
             count += 1

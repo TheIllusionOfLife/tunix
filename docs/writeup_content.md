@@ -15,15 +15,9 @@ Diagram showing: `Gemma 2B-IT` → `[SFT on Diverse Reasoning]` → `Thinking Mo
 
 ## 2. Project Description
 
-### Introduction
+### Supervised Fine-Tuning on Diverse Domains
 
-Reasoning is the frontier of small language models. While large models naturally "think" before responding, smaller models like Gemma 2B often rush to provide answers without proper deliberation.
-
-Our approach: **Teach reasoning through demonstration**, not trial-and-error. By fine-tuning on high-quality reasoning traces from diverse domains, we enable Gemma 2B to learn HOW to think, not just WHAT to answer.
-
-### The Strategy: Supervised Fine-Tuning on Diverse Domains
-
-We prioritized **non-verifiable domains** (creative, analytical, philosophical) over math/code because:
+We prioritized non-verifiable domains (creative, analytical, philosophical) over math/code because:
 1. Competition evaluation emphasizes diverse reasoning quality
 2. Smaller models benefit more from demonstration than exploration
 3. SFT is more efficient, allowing 10x more training samples
