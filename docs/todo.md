@@ -1,74 +1,75 @@
-# Tunix Zero-Cost Challenge: Master TODO
+# Tunix SFT Strategy: Master TODO
 
-This file orchestrates the execution plan across all specific documentation.
+Strategy pivot: From GRPO on math/code to **SFT on diverse domains** with reasoning traces.
 
 ## 📚 Documentation Index
-*   **Strategy**: [Scoring Breakdown](scoring_breakdown.md) | [Advanced Strategies](advanced_strategies.md)
-*   **Execution**: [Kaggle Memo](kaggle_memo.md) | [TPU Resource Plan](tpu_resource_plan.md)
-*   **Submission**: [Unrestricted Guide](unrestricted_mode_guide.md) | [Writeup Content](writeup_content.md) | [Video Script](video_script.md)
+- **Strategy**: [Scoring Breakdown](scoring_breakdown.md) | [Advanced Strategies](advanced_strategies.md)
+- **Execution**: [Kaggle Memo](kaggle_memo.md) | [TPU Resource Plan](tpu_resource_plan.md)
+- **Submission**: [Unrestricted Guide](unrestricted_mode_guide.md) | [Writeup Content](writeup_content.md) | [Video Script](video_script.md)
+- **Archive**: [GRPO Strategy Docs](../archive/) (backup if we revert)
 
 ---
 
-## ✅ Code Quality Fixes (Completed)
+## 🎯 Core Strategy
 
-- [x] Fixed `algo_config` parameter in GRPOLearner (v0.1.5 API)
-- [x] Fixed import typo `rollouts` → `rollout`
-- [x] Increased GRPO_STEPS from 600 to 1500
-- [x] Fixed TEMPLATE definition order (now before baseline eval)
-- [x] Updated dataset description to match reality (GSM8K/MBPP only)
-- [x] Removed unused `SFT_STEPS` and `PROMPT_TEMPLATE`
-- [x] Updated Learnings section (no-SFT approach)
-- [x] Changed fallback to `raise RuntimeError` (fail-fast)
-- [x] Fixed `code_correctness_reward` to handle `<answer>` tags
+**Method**: Supervised Fine-Tuning (SFT) on high-quality reasoning traces
+**Focus**: Non-verifiable domains (creative, analytical, philosophical, commonsense)
+**Rationale**: FAQ states verifiable tasks (math/code) have "much lower weights"
 
 ---
 
-## 🗂️ Pre-Run: Dataset Setup
+## 📦 Datasets to Use
 
-- [x] **Delete old `tunix-public-data`** on Kaggle.
-- [x] **Create new `tunix-public-data`** dataset with:
-    - `sft_magpie.jsonl` (for potential future SFT)
-    - `sft_ultrafeedback.jsonl` (for potential future SFT)
-    - `grpo_gsm8k_train.jsonl` ← **Used by GRPO**
-    - `grpo_mbpp_train.jsonl` ← **Used by GRPO**
-- [ ] **Create `tunix-private-hard-reasoning`** dataset (Private) with:
-    - `private_hard_reasoning.jsonl`
+| Dataset | Samples | Domain Focus | License |
+|:---|:---:|:---|:---|
+| sequelbox/Raiden-DeepSeek-R1 | 62.9K | Creative/analytical | Apache 2.0 |
+| O1-OPEN/OpenO1-SFT | 20K (sampled) | General reasoning | Apache 2.0 |
+| moremilk/General_Inquiry_Thinking | 6K | Philosophical/everyday | MIT |
+| pharaouk/CoT-Collection | 10K (filtered) | Commonsense/ethics | CC-BY-4.0 |
+| glaiveai/reasoning-v1-20m | Unlimited | Extended training | Apache 2.0 |
 
----
-
-## ✅ Phase 1: Main Track Submission (45 pts)
-
-- [ ] **Run `tunix_zero_cost_train.ipynb`** on Kaggle TPU v5e-8
-- [ ] **Verify Output**: Check `<reasoning>` tags in generated samples (~99% expected)
-- [ ] **Save Checkpoint**: Download `final_submission_model/` from Output
-- [ ] **Upload as Dataset**: Name it `tunix-session1-checkpoint`
+**Note**: Download raw from HuggingFace, process in-notebook to prove public data usage.
 
 ---
 
-## 🚀 Phase 2: Unrestricted Mode (15 bonus pts)
+## 🗂️ Data Preparation
 
-**Notebook**: `tunix_continuation.ipynb`
+- [ ] Create Kaggle dataset with raw data downloads
+- [ ] Write preprocessing code for each dataset format
+- [ ] Add source documentation for judge verification
 
-### Session 2:
-- [ ] Attach datasets: `tunix-session1-checkpoint` + `tunix-private-hard-reasoning`
-- [ ] Update config: `PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session1-checkpoint/checkpoint"`
-- [ ] Run notebook on Kaggle TPU
-- [ ] Download output → Upload as `tunix-session2-checkpoint`
-
-### Session 3 (if needed):
-- [ ] Update config: `PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session2-checkpoint/checkpoint"`
-- [ ] Run notebook
-- [ ] Download output → Upload as **Kaggle Model** with path `/jax/size/`
-
-### Final Step:
-- [ ] Update `unrestricted_kaggle_model` in submission notebook with Model ID
-
-**Note**: When uploading to Kaggle Models, create folder structure `jax/size/` and place checkpoint files inside.
+### Format Standardization
+All datasets converted to:
+```
+<start_of_turn>user
+{question}<end_of_turn>
+<start_of_turn>model
+<reasoning>{trace}</reasoning>
+<answer>{answer}</answer>
+```
 
 ---
 
-## 🎬 Phase 3: Final Submission Bundle
+## ✅ Phase 1: Single Session (45 pts)
 
-- [ ] **Video**: Record using `docs/video_script.md` (< 3 min)
-- [ ] **Writeup**: Submit on Kaggle using `docs/writeup_content.md`
-- [ ] **Attach**: Notebook + Video to Writeup
+- [ ] **Notebook**: Create `tunix_sft_train.ipynb`
+- [ ] **Data**: Raiden + OpenO1 + General + CoT (~100K samples)
+- [ ] **Training**: SFT with 2-3 epochs
+- [ ] **Verify**: Check `<reasoning>` tags in outputs
+- [ ] **Save**: Checkpoint for unrestricted mode
+
+---
+
+## 🚀 Phase 2: Unrestricted Mode (+15 pts)
+
+- [ ] **Session 2**: Continue SFT on glaiveai dataset
+- [ ] **Session 3**: More SFT or optional GRPO polish
+- [ ] **Upload**: Final model to Kaggle Models
+
+---
+
+## 🎬 Phase 3: Final Submission
+
+- [ ] **Video**: Record < 3 min demo
+- [ ] **Writeup**: Submit with notebook
+- [ ] **Attach**: Video + notebook to writeup

@@ -1,95 +1,77 @@
-# Unrestricted Mode Guide (Optional 15 Points)
+# Unrestricted Mode Guide (SFT Strategy)
 
-This guide explains how to win the extra 15 points for "Model quality across multiple Kaggle sessions".
-
-**Goal**: Train a stronger model by chaining sessions and using your private "Hard Reasoning" dataset.
+This guide explains how to extend training across multiple sessions for the 15 bonus points.
 
 ---
 
-## Prerequisites
+## Overview
 
-| Asset | Status | Location |
-|:---|:---:|:---|
-| `tunix_zero_cost_train.ipynb` | ✅ | Main track notebook (Session 1) |
-| `tunix_continuation.ipynb` | ✅ | Continuation notebook (Session 2+) |
-| `private_hard_reasoning.jsonl` | ✅ | `data/` folder (upload separately) |
-
----
-
-## Step 1: Upload Datasets to Kaggle
-
-### Public Data (for Session 1):
-**Dataset Name**: `tunix-public-data`
-**Contents**:
-- `sft_magpie.jsonl`
-- `sft_ultrafeedback.jsonl`
-- `grpo_gsm8k_train.jsonl`
-- `grpo_mbpp_train.jsonl`
-
-### Private Data (for Session 2+):
-**Dataset Name**: `tunix-private-hard-reasoning`
-**Contents**:
-- `private_hard_reasoning.jsonl`
-**Visibility**: **Private**
+| Session | Method | Data | Output |
+|:---|:---|:---|:---|
+| 1 | SFT | Core datasets (~100K) | Checkpoint |
+| 2 | SFT | glaiveai extended (~100K more) | Checkpoint |
+| 3 | Optional GRPO | Subset with answers | Final Model |
 
 ---
 
-## Step 2: Session 1 - Base Training
+## Session 1: Single Session Submission
 
-1. Open `tunix_zero_cost_train.ipynb` on Kaggle.
-2. Attach dataset: `tunix-public-data`.
-3. Run the notebook (9h limit).
-4. After completion, download `final_submission_model/` from Output.
-5. Upload as Kaggle Dataset: `tunix-session1-checkpoint`.
+**Notebook**: `tunix_sft_train.ipynb`
+
+1. Attach Kaggle dataset with raw data
+2. Run preprocessing + SFT training
+3. Save checkpoint to output
+4. Upload output as Kaggle Dataset: `tunix-session1-checkpoint`
 
 ---
 
-## Step 3: Session 2 - Continuation Training
+## Session 2: Extended SFT
 
-1. Open `tunix_continuation.ipynb` on Kaggle.
-2. Attach datasets:
+**Notebook**: `tunix_sft_continuation.ipynb`
+
+1. Attach datasets:
    - `tunix-session1-checkpoint`
-   - `tunix-private-hard-reasoning`
-3. Update config cell:
-   ```python
-   PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session1-checkpoint/checkpoint"
-   DATA_DATASET = "/kaggle/input/tunix-private-hard-reasoning"
-   ```
-4. Run the notebook.
-5. Download output → Upload as `tunix-session2-checkpoint`.
+   - `tunix-glaiveai-data` (or download in notebook)
 
----
-
-## Step 4: Session 3+ (Optional)
-
-Repeat Session 2 with updated checkpoint path:
+2. Load checkpoint from session 1
+3. Continue SFT on glaiveai samples
+4. Save new checkpoint
 
 ```python
-PREV_CHECKPOINT_DATASET = "/kaggle/input/tunix-session2-checkpoint/checkpoint"
+# Load previous checkpoint
+checkpointer.restore(PREV_CHECKPOINT_PATH, target=model_state)
+
+# Continue SFT on new data
+trainer.train(glaiveai_iterator)
 ```
 
 ---
 
-## Step 5: Final Submission
+## Session 3: Optional Polish
 
-1. After final session, **upload output as Kaggle Model**:
-   - Go to Kaggle → Models → New Model
-   - Upload `final_continuation_model/` contents
-   - **Crucial**: Ensure the files are inside a folder named `jax/size/` within the model version.
-   - Set visibility: Public
-   - Note the Model ID (e.g., `yuyamukai/tunix-gemma2-2b-unrestricted`)
+Two options:
+- **More SFT**: Continue with specialized data
+- **GRPO**: Light RL polish on verifiable tasks (if time permits)
 
-2. Update `unrestricted_kaggle_model` in your submission notebook:
+---
+
+## Final Upload
+
+1. Download final checkpoint
+2. Create Kaggle Model:
+   - Structure: `jax/size/` folder containing checkpoint files
+   - Visibility: Public
+3. Update notebook with Model ID:
    ```python
-   unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-2b-unrestricted"
+   unrestricted_kaggle_model = "username/tunix-gemma2-sft"
    ```
 
 ---
 
-## Summary
+## Data for Each Session
 
-| Session | Notebook | Input Data | Output |
-|:---|:---|:---|:---|
-| 1 | `tunix_zero_cost_train.ipynb` | Public data | `tunix-session1-checkpoint` |
-| 2 | `tunix_continuation.ipynb` | Private hard data | `tunix-session2-checkpoint` |
-| 3+ | `tunix_continuation.ipynb` | Private hard data | Final Kaggle Model |
+| Session | Dataset | Samples |
+|:---|:---|:---:|
+| 1 | Raiden + OpenO1 + General + CoT | ~100K |
+| 2 | glaiveai/reasoning-v1-20m | 100K-500K |
+| 3 | (Depends on session 2 results) | Variable |

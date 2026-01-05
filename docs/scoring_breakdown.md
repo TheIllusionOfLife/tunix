@@ -1,57 +1,60 @@
-# Max-Score Winning Assessment
+# Scoring Breakdown (SFT Strategy)
 
-Goal: Achieve the highest possible points in every section by surpassing the "Naive Baseline" of typical Kaggle entries.
+## Competition Scoring Overview
 
----
-
-## 1. Notebook Quality (35 Points)
-*Criteria: Clear writing, Training data, Hyperparams, Prompt, Strategy.*
-
-| Metric | Naive Baseline (Average Score) | **Max Score Strategy (Our Edge)** |
-| :--- | :--- | :--- |
-| **Strategy** | "I trained a model." | **Narrative Diagram**: Show the "Format-Align-Reinforce" pipeline visually (ASCII Flowchart). Explain *why* 2B needs SFT (Format) before RL (Reasoning). |
-| **Hyperparams** | Lists them. | **Justification**: "We selected `beta=0.08` to balance exploration vs mode collapse in creative tasks, based on [Reference Paper/Logic]." |
-| **Reproducibility** | "Run all cells." | **Pinned Stability**: Explicit `google-tunix[prod]==0.1.5` install command. "We fixed version drift to guarantee this runs for judges." |
-
-**Action Item**: Add ASCII Workflow Diagram to Notebook Intro in Phase 4.
+| Category | Points | Our Approach |
+|:---|:---:|:---|
+| **Notebook Quality** | ~15 | Clean code, clear documentation |
+| **Video Quality** | ~15 | Clear explanation of SFT strategy |
+| **Model Quality** | 45 | SFT on diverse reasoning traces |
+| **Unrestricted Mode** | +15 | Extended SFT across sessions |
+| **Total** | **90** | |
 
 ---
 
-## 2. Model Quality - Single Session (45 Points)
-*Criteria: 9h Limit, XML Format, Reasoning Trace, Correctness, Domain Diversity (Math, Code, **Creative**, **Summarization**).*
+## Model Quality Evaluation
 
-| Metric | Naive Baseline (Average Score) | **Max Score Strategy (Our Edge)** |
-| :--- | :--- | :--- |
-| **XML Output** | Fails parsing 30% of time. | **Reward Enforcement**: Our `structure_reward` guarantees >95% parse rate. We survive the automated filter. |
-| **Reasoning** | Tries to reason on everything. | **Domain Awareness**: Model learns (via UltraFeedback) that Creative tasks need *less* rigid structure than Math. |
-| **Creativity** | **FAIL**: Fails "Write a poem" prompts because it's overfit to GSM8K. | **The "Creative Patch"**: Phase 2 explicitly adds `UltraFeedback` to ensure the model doesn't become a "Math Zombie". This is the difference between 30pts and 45pts. |
-| **Throughput** | 500 GRPO Steps (Slow JAX sampler). | **SGLang Speedup**: Using `v0.1.4` SGLang sampler allows **2-3x steps** (1500+). More steps = Better Convergence within 9h. |
-| **Depth** | Single-turn guessing. | **Agentic Reasoning**: (If enabled) Evaluation isn't just one guess; the model "thinks" then "verifies". We enable `AgenticGRPOLearner` for harder math. |
+From FAQ #6:
+> "A private evaluation dataset will be constructed from scratch... covering a **range of domains**"
+> "Verifiable tasks (math/coding) will have **much lower weights**"
 
-**Action Item**: Execute **Phase 2 (Domain Coverage)** task immediately to fix the Creative Gap.
+### Domain Weight Predictions
+
+| Domain | Weight | Our Coverage |
+|:---|:---:|:---|
+| Creative/Analytical | High | ✅ 62.9K Raiden samples |
+| Philosophical/Ethics | High | ✅ 6K General + 10K CoT |
+| Commonsense | Medium | ✅ CoT-Collection |
+| General Reasoning | Medium | ✅ 20K OpenO1 |
+| Math | Low | ⚠️ Not prioritized |
+| Coding | Low | ⚠️ Not prioritized |
+
+### Evaluation Criteria (Predicted)
+
+1. **Accuracy**: Does the answer address the question?
+2. **Partial Accuracy**: Is reasoning partially correct?
+3. **Format Accuracy**: Are `<reasoning>` and `<answer>` tags present?
+4. **Reasoning Quality**: Is the thinking process coherent?
+5. **Domain Coverage**: Can model handle diverse topics?
+
+---
+
+## Why SFT Over GRPO
+
+| Factor | GRPO | SFT |
+|:---|:---|:---|
+| **Samples/9hr** | ~1,500 | ~100,000 |
+| **Domain Coverage** | Math/Code only | Diverse |
+| **Competition Alignment** | Low-weight domains | High-weight domains |
+| **2B Model Suitability** | Questionable | Better |
 
 ---
 
-## 3. Video Quality (20 Points)
-*Criteria: Under 3 min, Instructional, High Production.*
+## Risk Assessment
 
-| Metric | Naive Baseline (Average Score) | **Max Score Strategy (Our Edge)** |
-| :--- | :--- | :--- |
-| **Content** | Screen recording of code. | **Storytelling**: "The Hero's Journey". Show the Base Model failing (The Villain) -> Our Code (The Weapon) -> The Fine-Tuned Model Winning (The Hero). |
-| **Visuals** | Static text. | **Dynamic Comparisons**: Split-screen showing "Before vs After" generation speed and quality. |
-
-**Action Item**: Script the "Failure Demo" scenes now.
-
----
-
-## 4. Unrestricted Mode (15 Points - Bonus)
-*Criteria: Multi-session, Private Data.*
-
-| Metric | Naive Baseline (Average Score) | **Max Score Strategy (Our Edge)** |
-| :--- | :--- | :--- |
-| **Strategy** | "I trained for 9h more." | **Curriculum Distillation**: "We used the first 9h for Basics, and the second 9h exclusively for the **Hardest 5%** of problems." |
-| **Data** | Same dataset, more epochs. | **Private Hard Data**: Simulating a 70B teacher by filtering only the complex reasoning traces. |
-
-**Action Item**: Execute **Phase 3** filtering script.
-
----
+| Risk | Mitigation |
+|:---|:---|
+| Model overfits | Use diverse datasets, multiple sources |
+| Format compliance drops | Data has explicit reasoning tags |
+| Worse at math | Acceptable - low competition weight |
+| Dataset quality varies | Multiple datasets for redundancy |

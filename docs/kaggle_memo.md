@@ -1,38 +1,65 @@
-
-# Kaggle Submission Memo
+# Kaggle Submission Memo (SFT Strategy)
 
 ## 1. Prepare Data
-1.  **Run Locally**: execute `python scripts/public_data_engine.py` (if not already done) to generate:
-    *   `data/sft_magpie.jsonl`
-    *   `data/grpo_gsm8k_train.jsonl`
-2.  **Upload to Kaggle**:
-    *   Go to Kaggle -> Datasets -> New Dataset.
-    *   Title: `tunix-public-data`
-    *   Upload the `data/` folder containing the `.jsonl` files.
-    *   **Note the path**: It will likely be `/kaggle/input/tunix-public-data`. Update the `DATASET_PATH` variable in the notebook if different.
+
+### Option A: Pre-upload Kaggle Dataset (Recommended)
+1. Download raw data from HuggingFace locally
+2. Keep original format (no preprocessing)
+3. Upload to Kaggle Datasets with source documentation
+4. Attach dataset to notebook
+
+### Option B: Download in Notebook
+1. Use HuggingFace `datasets` library
+2. Download at runtime (requires internet)
+3. Slower but proves public data usage
+
+### Data Sources Documentation
+
+Include a `DATA_SOURCES.md` in your Kaggle dataset:
+
+```markdown
+# Data Sources
+
+| Dataset | Source | License |
+|:---|:---|:---|
+| Raiden-DeepSeek-R1 | huggingface.co/datasets/sequelbox/Raiden-DeepSeek-R1 | Apache 2.0 |
+| OpenO1-SFT | huggingface.co/datasets/O1-OPEN/OpenO1-SFT | Apache 2.0 |
+| General_Inquiry_Thinking | huggingface.co/datasets/moremilk/General_Inquiry_Thinking-Chain-Of-Thought | MIT |
+| CoT-Collection | huggingface.co/datasets/pharaouk/CoT-Collection | CC-BY-4.0 |
+```
+
+---
 
 ## 2. Prepare Notebook
-1.  **Upload Notebook**:
-    *   Go to Kaggle -> Code -> New Notebook.
-    *   File -> Import Notebook -> Upload `tunix_zero_cost_train.ipynb`.
-2.  **Configure Accelerator**:
-    *   Session Options -> Accelerator -> **TPU VM v5e-8** (Required for Tunix).
-    *   Session Options -> Persistence -> Files only (optional, good for saving checkpoints).
+
+1. Upload `tunix_sft_train.ipynb`
+2. Configure accelerator: **TPU VM v5e-8**
+3. Attach: Data Kaggle Dataset
+4. Enable persistence for checkpoints
+
+---
 
 ## 3. Run Training
-1.  **Execute All Cells**:
-    *   The notebook installs `tunix` from the repository (or you can add the repo as a dataset).
-    *   It leverages the pre-trained instruction following of Gemma 2B-IT.
-    *   It trains GRPO on GSM8K data (Math Correctness).
-    *   It saves the final model.
+
+Notebook will:
+1. Install Tunix and dependencies
+2. Load & preprocess datasets
+3. Initialize Gemma 2B-IT with LoRA (or full weights)
+4. Run SFT for 2-3 epochs
+5. Save final checkpoint
+
+---
 
 ## 4. Submission
-1.  **Save Version**: Click "Save Version" -> "Save & Run All (Commit)".
-    *   This ensures the notebook runs end-to-end within the 9-hour limit.
-2.  **Submit**:
-    *   Go to the competition page -> Submit.
-    *   Select the notebook you just ran.
 
-## Tips
-*   **Debug Mode**: If debugging, reduce `GRPO_STEPS` to 10 to check if it runs through quickly.
-*   **Tunix Install**: If `!pip install git+...` fails due to internet off during submission, you must upload the `tunix` wheel or repo as a dataset and install from there.
+1. **Save Version**: "Save & Run All (Commit)"
+2. **Verify**: Check output has checkpoint files
+3. **Submit**: Link notebook on competition page
+
+---
+
+## Debugging Tips
+
+- **Debug mode**: Set `MAX_STEPS=100` to quick test
+- **Memory issues**: Reduce batch size or sequence length
+- **Data errors**: Check preprocessing logs carefully

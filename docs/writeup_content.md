@@ -1,71 +1,67 @@
-# Kaggle Writeup Content Guide
-
-Use this content to fill out the "New Writeup" form.
-
----
+# Kaggle Writeup Content (SFT Strategy)
 
 ## 1. Basic Details
+
 **Title**: 
-`Tunix Zero-Cost: Format-Align-Reinforce to Distill Reasoning`
+`Tunix Zero-Cost: Teaching Reasoning Through Demonstration`
 
 **Subtitle**: 
-`A 3-stage pipeline fitting Gemma 2B into a single TPU session using only public data.`
+`SFT on high-quality reasoning traces across diverse domains using only public data.`
 
-**Card Image**:
-*   *Suggestion*: Create a simple diagram showing: `Gemma 2B` -> `[SFT (Magpie)]` -> `[GRPO (Math/Code)]` -> `Thinking Model`.
-*   [Use the Mermaid diagram below as inspiration for a screenshot]
+**Card Image**: 
+Diagram showing: `Gemma 2B-IT` → `[SFT on Diverse Reasoning]` → `Thinking Model`
 
 ---
 
-## 2. Project Description (The Main Text)
+## 2. Project Description
 
 ### Introduction
-Reasoning is the frontier of small language models. While large models (70B+) can naturally "think" before speaking, small models like Gemma 2B often rush to hallucinate an answer. In this project, we implement a **Zero-Cost Strategy** to distill reasoning capabilities into Gemma 2B using Google Tunix.
 
-Our goal was to build a competitive reasoning model **without spending a single dollar on API credits**. Instead of brute force, we used a strategic **"Format-Align-Reinforce"** pipeline. By strictly separating "Structure Learning" (SFT) from "Logic Reinforcement" (GRPO), we achieved high parsing stability (>95%) where naive baselines often fail.
+Reasoning is the frontier of small language models. While large models naturally "think" before responding, smaller models like Gemma 2B often rush to provide answers without proper deliberation.
 
-### The Strategy: "Format-Align-Reinforce"
-We devised a two-stage training pipeline designed to fit strictly within the 9-hour Kaggle TPUv5e session limit.
+Our approach: **Teach reasoning through demonstration**, not trial-and-error. By fine-tuning on high-quality reasoning traces from diverse domains, we enable Gemma 2B to learn HOW to think, not just WHAT to answer.
 
-#### Stage 1: SFT (Format & Style)
-Before a model can reason correctly, it must learn *how* to reason. We used **Supervised Fine-Tuning (SFT)** to teach the model the required output structure:
-`<reasoning>... steps ...</reasoning><answer>... result ...</answer>`
+### The Strategy: Supervised Fine-Tuning on Diverse Domains
 
-*   **Dataset**: `Magpie-Reasoning-V2` (5k subset) & `UltraFeedback` (1k subset).
-*   **Why**: Magpie contains synthetic reasoning traces distilled from DeepSeek-R1/Llama-70B. By fine-tuning on this, we "format" Gemma 2B to adopt a reflective thinking style. UltraFeedback adds diversity to prevent the model from becoming a pure math-bot.
+We prioritized **non-verifiable domains** (creative, analytical, philosophical) over math/code because:
+1. Competition evaluation emphasizes diverse reasoning quality
+2. Smaller models benefit more from demonstration than exploration
+3. SFT is more efficient, allowing 10x more training samples
 
-#### Stage 2: GRPO (Reinforcement)
-Once the model knows the format, we need to incentivize correctness. We used **Group Relative Policy Optimization (GRPO)**.
-*   **Dataset**: `GSM8K` (Math) and `MBPP` (Coding).
-*   **Why GRPO?**: Unlike PPO, GRPO does not require a separate value network (Critic), saving massive amounts of memory. This allowed us to run RL natively on the 2B model on a single TPU chip.
-*   **Reward Functions**:
-    *   `structure_reward`: Strict regex enforcement of XML tags.
-    *   `correctness_reward`: Symbolic verification (SymPy) for math and syntax checking for python code.
+#### Datasets Used
+- **Raiden-DeepSeek-R1**: 62.9K creative & analytical samples
+- **OpenO1-SFT**: 20K general reasoning samples
+- **General_Inquiry_Thinking**: 6K philosophical & everyday queries
+- **CoT-Collection**: 10K commonsense & ethics tasks
+
+All datasets feature explicit reasoning traces (`<think>` tags) distilled from frontier models.
 
 ### Implementation Details
-*   **Library**: `google-tunix`, `flax`, `jax`.
-*   **Hardware**: Kaggle TPU VM v5e-8.
-*   **Efficiency**: 
-    *   SFT: ~1.5 hours.
-    *   GRPO: ~5 hours.
-    *   Total runtime: < 7 hours, leaving buffer for inference and evaluation.
 
-### Unrestricted Mode (Optional)
-To push performance further, we implemented a **Multi-Session Chaining** strategy.
-1.  **Session 1**: Base training on public data.
-2.  **Session 2**: Loaded the Session 1 checkpoint and continued training on a curated "Hard" subset of Magpie/GSM8K.
-This effectively doubled our training compute budget to 18+ hours while keeping the individual sessions within limits.
+- **Library**: `google-tunix`, `flax`, `jax`
+- **Hardware**: Kaggle TPU VM v5e-8
+- **Method**: Full-weight SFT (not LoRA) for maximum quality
+- **Runtime**: ~8 hours processing 100K+ samples
 
-### Learnings & Challenges
-*   **SFT is Crucial**: Trying to run GRPO directly on a raw base model failed. The model must "learn the rules" (SFT) before it can "play the game" (RL).
-*   **Version Pinning**: Stability on Kaggle requires strict version pinning. We pinned `google-tunix[prod]==0.1.5` to avoid API drifts in the development branch.
-*   **Silent Failures detected**: We caught and patched a critical issue where RNGs were not passed to LoRA layers, preventing proper initialization.
+### Key Insight
 
-### Conclusion
-This project demonstrates that you don't need massive compute to train reasoning models. By carefully sequencing "Format Learning" (SFT) and "Truth Reinforcement" (GRPO), we turned Gemma 2B into a capable thinker.
+> "For 2B parameter models, learning from demonstrations is more effective than reinforcement learning. SFT provides dense supervision at every token, while RL provides sparse rewards only at sequence end."
+
+### Unrestricted Mode
+
+For bonus points, we extended training using the massive glaiveai/reasoning-v1-20m dataset (22.2M samples) across multiple sessions.
 
 ---
 
-## 3. Attachments
-*   **Media Gallery**: Upload your Video (Youtube Link) and the Architecture Diagram.
-*   **Public Notebook**: Link your `tunix_zero_cost_train.ipynb`.
+## 3. Learnings
+
+- **Domain Matters More Than Method**: Training on diverse, high-weight domains (creative, analytical) outweighs technique sophistication
+- **SFT Efficiency**: Processed 100K samples vs ~1,500 GRPO steps in same time
+- **Reasoning Traces Are Key**: Explicit `<think>` traces teach structured problem-solving
+
+---
+
+## 4. Attachments
+
+- **Video**: YouTube link (< 3 min)
+- **Notebook**: `tunix_sft_train.ipynb`

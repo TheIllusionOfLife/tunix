@@ -1,71 +1,99 @@
-# TPU Resource & Timeline Strategy (11 Days Left)
+# TPU Resource Plan (SFT Strategy)
 
-**Core Principle**: Secure the **80 Points** (Single Session + Notebook Quality) before chasing the **15 Points** (Unrestricted).
+## Hardware Overview
 
-## The Mathematics of Winning
-*   **Single Session Checkpoint**: 45 pts
-*   **Notebook Documentation**: 35 pts
-*   **Video**: 20 pts
-*   **Unrestricted Mode**: 15 pts (Bonus)
-
-**Risk**: If you spend all time on Unrestricted and break your Single Session notebook, you lose the core competition.
-
----
-
-## Period 1: The "Safety Net" (Current Status: Executing)
-**Goal**: A submitted, valid Single Session entry.
-*   **Activity**: Run `tunix_zero_cost_train.ipynb` **successfully** end-to-end.
-*   **Why**: If you run out of time later or hit bugs, you need *something* on the leaderboard.
-*   **Evaluation**:
-    *   Download `submission.csv` (or output logs).
-    *   Run `scripts/evaluation_judge.py` locally on the logs.
-    *   Check: Does it *always* output XML?
-
-## Period 2: "Exploration & Unrestricted" (Tomorrow + 6 Days)
-**Quota**: 20 Hours.
-**Goal**: Push performance (Unrestricted) and learn data quality.
-
-*   **Run 1 (Unrestricted - Leg 1)**: 9 Hours.
-    *   Train **SFT-Only** on full Magpie (or larger subset).
-    *   Save dataset: `tuned-sft-checkpoint`.
-*   **Run 2 (Unrestricted - Leg 2)**: 9 Hours.
-    *   Load `tuned-sft-checkpoint`.
-    *   Train **GRPO-Only** on GSM8K/MBPP + Private Hard Data.
-    *   **Action**: Submit this Model ID for the 15 pts.
-*   **Run 3 (Validation)**: 2 Hours (Remainder).
-    *   Use this to test hyperparameter tweaks (learning rate, beta) for the Single Session.
-
-**Analysis**: Compare the "Unrestricted" output vs "Safety Net" output using `evaluation_judge.py`.
-*   If Unrestricted is MUCH better -> Try to squeeze more epochs into the Single Session config.
-*   If Comparison is close -> Your Single Session is efficient!
-
-## Period 3: "The Golden Run" (Final Days)
-**Quota**: 20 Hours (Fresh).
-**Goal**: The Final Submission & Video.
-
-*   **Run 1 (Final Single Session)**: 9 Hours.
-    *   Apply all learnings (best LR, best data mix).
-    *   This is your **Main Track Entry**.
-*   **Run 2 (Video Demo)**:
-    *   Use this run to record the "Live Demo" part of your video.
-    *   Generate specific cool examples (e.g. "Solve this complex riddle").
+| Resource | Specification |
+|:---|:---|
+| TPU Type | v5e-8 |
+| HBM per core | 16 GB |
+| Cores | 8 |
+| Session limit | 9 hours |
+| Weekly limit | 20 hours |
 
 ---
 
-## Role of Colab TPU
-**Warning**: Colab TPU environment (XLA version, JAX version) often differs from Kaggle.
-**Do NOT** train weights on Colab to transfer to Kaggle. It might fail to load.
+## SFT vs GRPO Resource Usage
 
-**USE Colab For**:
-1.  **Data Processing**: Run `public_data_engine.py` to generate massive datasets (finding "Hard" examples) -> Upload to Kaggle.
-2.  **Code Debugging**: Syntax check `tunix` imports or reward functions.
-3.  **Evaluation**: Run `evaluation_judge.py` on outputs.
-**Do NOT Use Colab For**:
-1.  Final Training Runs.
+| Metric | GRPO | SFT |
+|:---|:---|:---|
+| **Samples/hour** | ~150-200 | ~10,000-15,000 |
+| **Memory/sample** | High (4x generations) | Low (1x forward+backward) |
+| **Total in 9hr** | ~1,500 steps | ~100,000 samples |
+
+SFT is dramatically more efficient for sample throughput.
 
 ---
 
-## Summary
-1.  **Today**: Lock in a valid Single Session run.
-2.  **Week 2**: Win the Unrestricted points & learn what works.
-3.  **Final Days**: Re-run the optimized Single Session & Record Video.
+## Session 1 Timeline (9 hours)
+
+| Time | Activity | Notes |
+|:---|:---|:---|
+| 0:00-0:30 | Setup & imports | Install Tunix, load model |
+| 0:30-1:00 | Data preprocessing | Load & format 100K samples |
+| 1:00-8:00 | SFT Training | ~100K samples, 2-3 epochs |
+| 8:00-8:30 | Checkpoint save | Save to output dir |
+| 8:30-9:00 | Inference test | Generate sample outputs |
+
+---
+
+## Memory Optimization
+
+### Batch Size Guidelines
+
+| Model | LoRA | Full Weights |
+|:---|:---:|:---:|
+| Gemma-2B | 4-8 | 2-4 |
+| Gemma-2B-IT | 4-8 | 2-4 |
+
+### Sequence Length
+
+| Max Length | Memory | Use Case |
+|:---|:---|:---|
+| 512 | Low | Short reasoning |
+| 1024 | Medium | Standard |
+| 2048 | High | Long traces |
+
+**Recommendation**: Start at 1024, increase if stable.
+
+---
+
+## Unrestricted Mode Sessions
+
+### Weekly Budget (20 hours)
+
+| Session | Duration | Cumulative |
+|:---|:---:|:---:|
+| 1 (Main) | 9h | 9h |
+| 2 | 8h | 17h |
+| 3 | 3h | 20h |
+
+### Session 2-3 Strategy
+
+- **Session 2**: Load checkpoint, continue SFT on glaiveai data
+- **Session 3**: Either more SFT or GRPO polish
+
+---
+
+## Checkpointing Strategy
+
+Save checkpoints at:
+- Every 1000 steps (during training)
+- End of session (for continuation)
+
+```python
+checkpointing_options = ocp.CheckpointManagerOptions(
+    save_interval_steps=1000,
+    max_to_keep=3,
+)
+```
+
+---
+
+## Contingency Plans
+
+| Issue | Solution |
+|:---|:---|
+| OOM during training | Reduce batch size or seq length |
+| Session timeout | Checkpoint auto-saves every 1000 steps |
+| Data preprocessing slow | Pre-upload processed data |
+| Model diverges | Reduce learning rate, add warmup |
