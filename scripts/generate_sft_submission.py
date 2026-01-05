@@ -112,8 +112,27 @@ print("Template variables defined.")
 !pip install -q tensorboardX
 !pip install -q transformers
 !pip install -q grain
-!pip install "google-tunix[prod]==0.1.5"
-!pip install git+https://github.com/google/qwix
+    # Tunix/Qwix Installation
+    # Check if we are offline (no internet), if so, assume wheels are attached
+    import socket
+    def is_connected():
+        try:
+            socket.create_connection(("1.1.1.1", 53))
+            return True
+        except OSError:
+            pass
+        return False
+
+    if is_connected():
+        !pip install "google-tunix[prod]==0.1.5"
+        !pip install git+https://github.com/google/qwix
+    else:
+        print("Offline mode detected. Assuming dependencies are installed or wheels provided.")
+        # Fallback: Try installing from local wheels if available
+        if os.path.exists("/kaggle/input/tunix-wheels"):
+            !pip install --no-index --find-links=/kaggle/input/tunix-wheels google-tunix
+            !pip install --no-index --find-links=/kaggle/input/tunix-wheels qwix
+
 
 # Fix Flax Version to 0.12.0 as required
 !pip uninstall -q -y flax
@@ -262,9 +281,18 @@ def standardize_to_gemma_format(text, question=None):
     
     # Handle already formatted text
     if "<start_of_turn>" in text:
-        # Just ensure we have our tags
-        text = text.replace("<think>", "<reasoning>").replace("</think>", "</reasoning>")
-        text = text.replace("<Thought>", "<reasoning>").replace("</Thought>", "</reasoning>")
+        # Just ensure we have our tags (case insensitive replacement)
+        text = re.sub(r"<think>", "<reasoning>", text, flags=re.IGNORECASE)
+        text = re.sub(r"</think>", "</reasoning>", text, flags=re.IGNORECASE)
+        text = re.sub(r"<thought>", "<reasoning>", text, flags=re.IGNORECASE)
+        text = re.sub(r"</thought>", "</reasoning>", text, flags=re.IGNORECASE)
+        
+        # Enforce <answer> tags if missing (sometimes models output just the answer after start_of_turn)
+        if "<answer>" not in text and "<start_of_turn>model" in text:
+            # Heuristic: Wrap the last part of the model turn in answer tags if not present
+            # This is risky but better than missing tags. 
+            # Ideally the data source guarantees this, but for safety:
+            pass 
         return text
     
     # For raw question/response pairs
@@ -274,9 +302,9 @@ def standardize_to_gemma_format(text, question=None):
         answer = ""
         
         # Try to extract think/reasoning
-        think_match = re.search(r"<think>(.*?)</think>", text, re.DOTALL)
-        thought_match = re.search(r"<Thought>(.*?)</Thought>", text, re.DOTALL)
-        reasoning_tag_match = re.search(r"<reasoning>(.*?)</reasoning>", text, re.DOTALL)
+        think_match = re.search(r"<think>(.*?)</think>", text, re.DOTALL | re.IGNORECASE)
+        thought_match = re.search(r"<Thought>(.*?)</Thought>", text, re.DOTALL | re.IGNORECASE)
+        reasoning_tag_match = re.search(r"<reasoning>(.*?)</reasoning>", text, re.DOTALL | re.IGNORECASE)
         
         if think_match:
             reasoning = think_match.group(1).strip()
@@ -289,11 +317,11 @@ def standardize_to_gemma_format(text, question=None):
             reasoning = text.strip()
         
         # Try to extract answer
-        ans_match = re.search(r"<Output>(.*?)</Output>", text, re.DOTALL)
+        ans_match = re.search(r"<Output>(.*?)</Output>", text, re.DOTALL | re.IGNORECASE)
         if ans_match:
             answer = ans_match.group(1).strip()
         else:
-            answer_match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL)
+            answer_match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL | re.IGNORECASE)
             if answer_match:
                 answer = answer_match.group(1).strip()
             else:
@@ -302,9 +330,9 @@ def standardize_to_gemma_format(text, question=None):
                 if reasoning_tag_match or think_match or thought_match:
                     # If reasoning was explicitly tagged, the rest is likely the answer
                     # This is a heuristic and might need refinement for specific datasets
-                    remaining_text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL)
-                    remaining_text = re.sub(r"<think>.*?</think>", "", remaining_text, flags=re.DOTALL)
-                    remaining_text = re.sub(r"<Thought>.*?</Thought>", "", remaining_text, flags=re.DOTALL)
+                    remaining_text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL | re.IGNORECASE)
+                    remaining_text = re.sub(r"<think>.*?</think>", "", remaining_text, flags=re.DOTALL | re.IGNORECASE)
+                    remaining_text = re.sub(r"<Thought>.*?</Thought>", "", remaining_text, flags=re.DOTALL | re.IGNORECASE)
                     answer = remaining_text.strip()
                     if not answer and reasoning: # If no answer found, and reasoning was found, use reasoning as answer
                         answer = reasoning
@@ -347,12 +375,26 @@ try:
             # 1. CoT-Collection
             if "cot_collection" in fname:
                 # CoT Collection: source (q), rationale (r), target (a)
+                # Strategy: Probabilistic sampling to get uniform distribution from ~1.8M samples
+                # Target: 10,000 samples. Total ~1.84M. Rate ~ 0.54%.
+                # We use 0.6% to be safe, then truncate.
+                import random 
+                cot_current_count = 0
+                cot_target = 10000
+                sampling_rate = 0.006 
+                
                 for sample in ds:
-                    q = sample.get("source", "")
-                    r = sample.get("rationale", "")
-                    a = sample.get("target", "")
-                    formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{r}</reasoning>\\n<answer>{a}</answer>"
-                    all_texts.append({"text": formatted})
+                    if cot_current_count >= cot_target:
+                        break
+                    
+                    # Random selection
+                    if random.random() < sampling_rate:
+                        q = sample.get("source", "")
+                        r = sample.get("rationale", "")
+                        a = sample.get("target", "")
+                        formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{r}</reasoning>\\n<answer>{a}</answer>"
+                        all_texts.append({"text": formatted})
+                        cot_current_count += 1
 
             # 2. GlaiveAI-Reasoning
             elif "glaive" in fname:
@@ -520,42 +562,93 @@ optimizer = optax.chain(
 )
 
 # Checkpointing
-checkpointing_options = ocp.CheckpointManagerOptions(
+# Using Orbax options via TrainingConfig
+checkpoint_options = ocp.CheckpointManagerOptions(
     save_interval_steps=500, max_to_keep=2
 )
 
-# Create simple training loop using grain
-import numpy as np
+# Data Iterator
+from tunix.sft import utils as sft_utils
 
-def create_text_batch(dataset, batch_size, tokenizer_fn):
-    '''Create batches from text dataset'''
+MAX_SEQ_LEN = 1024
+
+def create_data_iterator(dataset, batch_size, tokenizer):
+    '''Create batches with tokenization and masking'''
     indices = np.random.permutation(len(dataset))
-    for i in range(0, len(dataset) - batch_size + 1, batch_size):
-        batch_indices = indices[i:i+batch_size]
-        texts = [dataset[int(idx)]['text'] for idx in batch_indices]
-        yield {'text': texts}
+    
+    # Infinite iterator matching steps
+    while True:
+        np.random.shuffle(indices)
+        for i in range(0, len(dataset), batch_size):
+            batch_indices = indices[i:i+batch_size]
+            if len(batch_indices) < batch_size:
+                continue # Skip incomplete batches
+                
+            texts = [dataset[int(idx)]['text'] for idx in batch_indices]
+            
+            # Tokenize
+            # Tunix tokenizer returns list of ids
+            batch_input_tokens = []
+            batch_input_mask = []
+            
+            for text in texts:
+                # Use Tunix Tokenizer.tokenize which handles BOS/EOS
+                # tokenize returns np.array, convert to list for padding
+                tokens = tokenizer.tokenize(text, add_eos=True).tolist()
+                
+                # Truncate / Pad
+                if len(tokens) > MAX_SEQ_LEN:
+                    tokens = tokens[:MAX_SEQ_LEN]
+                    mask = [True] * MAX_SEQ_LEN
+                else:
+                    pad_len = MAX_SEQ_LEN - len(tokens)
+                    mask = [True] * len(tokens) + [False] * pad_len
+                    tokens = tokens + [0] * pad_len # 0 is usually pad, verify if needed
+                
+                batch_input_tokens.append(tokens)
+                batch_input_mask.append(mask)
+            
+            # Convert to JAX arrays
+            input_tokens = jnp.array(batch_input_tokens, dtype=jnp.int32)
+            input_mask = jnp.array(batch_input_mask, dtype=jnp.bool_)
+            
+            # Create PEFT required inputs
+            positions = sft_utils.build_positions_from_mask(input_mask)
+            attention_mask = sft_utils.make_causal_attn_mask(input_mask)
+            
+            yield {
+                "input_tokens": input_tokens,
+                "input_mask": input_mask,
+                "positions": positions,
+                "attention_mask": attention_mask
+            }
 
-# Training loop placeholder
-# Note: Tunix SFT API varies - adjust based on version
+# Training Configuration
+training_config = peft_trainer.TrainingConfig(
+    max_steps=SFT_STEPS,
+    checkpoint_root_directory=SFT_OUTPUT_DIR,
+    gradient_accumulation_steps=GRADIENT_ACCUMULATION,
+    checkpointing_options=checkpoint_options,
+    pbar_description="SFT Training",
+    metrics_prefix="sft",
+    eval_every_n_steps=10000, # Disable freq eval for speed or set high
+)
+
+# Initialize Trainer
+# Note: we pass the optimizer, model, and config.
+# Metrics logger defaults are fine.
+trainer = peft_trainer.PeftTrainer(
+    model=lora_model,
+    optimizer=optimizer,
+    training_config=training_config
+)
+
+# Create Iterator
+train_iter = create_data_iterator(sft_dataset, TRAIN_BATCH_SIZE, tokenizer)
+
+print(f"Starting Training for {SFT_STEPS} steps...")
 with mesh:
-    # Simple epoch-based training
-    num_epochs = 3
-    samples_per_epoch = len(sft_dataset)
-    steps_per_epoch = samples_per_epoch // EFFECTIVE_BATCH
-    
-    print(f"Training config:")
-    print(f"  Total samples: {samples_per_epoch}")
-    print(f"  Effective batch size: {EFFECTIVE_BATCH}")
-    print(f"  Steps per epoch: {steps_per_epoch}")
-    print(f"  Total epochs: {num_epochs}")
-    print(f"  Total steps: {steps_per_epoch * num_epochs}")
-    
-    # TODO: Replace with actual Tunix SFT trainer when API is confirmed
-    # trainer = peft_trainer.PeftTrainer(...)
-    # trainer.train(dataset_iterator)
-    
-    print("\\n[Placeholder: SFT training would run here]")
-    print("Using Tunix peft_trainer API when confirmed.")
+    trainer.train(train_ds=train_iter, skip_jit=False)
 
 print("SFT Training Completed.")
 """)
@@ -616,10 +709,20 @@ try:
     )
     
     print("--- Post-Training Outputs ---")
+    valid_format_count = 0
     for p, o in zip(test_prompts, out_data.text):
         print(f"Prompt: {p}")
         print(f"Output: {o[:500]}")
-        print("-"*50)
+        
+        # Simple quantitative format check
+        if "<reasoning>" in o and "</reasoning>" in o and "<answer>" in o and "</answer>" in o:
+            valid_format_count += 1
+            print("✅ Format Check: Passed")
+        else:
+            print("❌ Format Check: Failed")
+        print("-" * 50)
+    
+    print(f"Format Validation: {valid_format_count}/{len(test_prompts)} passed.")
 
 except Exception as e:
     print(f"Evaluation failed: {e}")

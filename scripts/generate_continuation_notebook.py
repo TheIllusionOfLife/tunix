@@ -57,8 +57,21 @@ GRADIENT_ACCUMULATION = 16
 !pip install -q tensorboardX
 !pip install -q transformers
 !pip install -q grain
-!pip install "google-tunix[prod]==0.1.5"
-!pip install git+https://github.com/google/qwix
+    # Tunix/Qwix Installation
+    import socket
+    def is_connected():
+        try:
+            socket.create_connection(("1.1.1.1", 53))
+            return True
+        except OSError:
+            return False
+
+    if is_connected():
+        !pip install "google-tunix[prod]==0.1.5"
+        !pip install git+https://github.com/google/qwix
+    else:
+        print("Offline mode detected. Assuming legacy installation or wheels.")
+
 
 # Fix Flax Version
 !pip uninstall -q -y flax
@@ -236,8 +249,12 @@ try:
         a = sample.get("output") or sample.get("answer")
         
         if q and a:
-            # Simple formatting
-            full_text = f"<start_of_turn>user\\n{system_prompt}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n{a}"
+            # Simple formatting using global variable if defined, or define consistency
+            # Note: In this continuation script, we define it here as it's a self-contained notebook cell
+            # But let's make it consistent with the main script
+            sys_prompt_str = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
+            
+            full_text = f"<start_of_turn>user\\n{sys_prompt_str}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n{a}"
             training_samples.append({"text": full_text})
             count += 1
             
@@ -257,6 +274,10 @@ except Exception as e:
 
 print("Starting SFT Continuation...")
 
+# Imports for Training
+import numpy as np
+from tunix.sft import utils as sft_utils
+
 # Optimizer (Lower LR)
 schedule = optax.warmup_cosine_decay_schedule(
     init_value=0.0,
@@ -270,17 +291,86 @@ optimizer = optax.chain(
     optax.adamw(learning_rate=schedule, weight_decay=0.01)
 )
 
-# Training Placeholder (Replace with Tunix Trainer)
+# Training Config
+checkpoint_options = ocp.CheckpointManagerOptions(
+    save_interval_steps=500, max_to_keep=2
+)
+
+MAX_SEQ_LEN = 1024
+
+def create_data_iterator(dataset, batch_size, tokenizer):
+    '''Create batches with tokenization and masking'''
+    indices = np.random.permutation(len(dataset))
+    
+    # Infinite iterator matching steps
+    while True:
+        np.random.shuffle(indices)
+        for i in range(0, len(dataset), batch_size):
+            batch_indices = indices[i:i+batch_size]
+            if len(batch_indices) < batch_size:
+                continue
+                
+            texts = [dataset[int(idx)]['text'] for idx in batch_indices]
+            
+            # Tokenize
+            batch_input_tokens = []
+            batch_input_mask = []
+            
+            for text in texts:
+                # Use Tunix Tokenizer.tokenize which handles BOS/EOS
+                tokens = tokenizer.tokenize(text, add_eos=True).tolist()
+                
+                # Truncate / Pad
+                if len(tokens) > MAX_SEQ_LEN:
+                    tokens = tokens[:MAX_SEQ_LEN]
+                    mask = [True] * MAX_SEQ_LEN
+                else:
+                    pad_len = MAX_SEQ_LEN - len(tokens)
+                    mask = [True] * len(tokens) + [False] * pad_len
+                    tokens = tokens + [0] * pad_len
+                
+                batch_input_tokens.append(tokens)
+                batch_input_mask.append(mask)
+            
+            # Convert to JAX arrays
+            input_tokens = jnp.array(batch_input_tokens, dtype=jnp.int32)
+            input_mask = jnp.array(batch_input_mask, dtype=jnp.bool_)
+            
+            # Create PEFT required inputs
+            positions = sft_utils.build_positions_from_mask(input_mask)
+            attention_mask = sft_utils.make_causal_attn_mask(input_mask)
+            
+            yield {
+                "input_tokens": input_tokens,
+                "input_mask": input_mask,
+                "positions": positions,
+                "attention_mask": attention_mask
+            }
+
+training_config = peft_trainer.TrainingConfig(
+    max_steps=SFT_STEPS,
+    checkpoint_root_directory=SFT_OUTPUT_DIR,
+    gradient_accumulation_steps=GRADIENT_ACCUMULATION,
+    checkpointing_options=checkpoint_options,
+    pbar_description="SFT Continuation",
+    metrics_prefix="sft_cont",
+    eval_every_n_steps=10000,
+)
+
+trainer = peft_trainer.PeftTrainer(
+    model=lora_model,
+    optimizer=optimizer,
+    training_config=training_config
+)
+
+# Create Iterator
+train_iter = create_data_iterator(sft_dataset, TRAIN_BATCH_SIZE, tokenizer)
+
+print(f"Starting Continuation Training for {SFT_STEPS} steps...")
+print(f"Learning Rate Peak: {LEARNING_RATE}")
+
 with mesh:
-    # num_epochs = 1 (since data is large)
-    # steps = SFT_STEPS
-    print(f"Target Steps: {SFT_STEPS}")
-    print(f"Learning Rate: {LEARNING_RATE}")
-    
-    # trainer = peft_trainer.PeftTrainer(...)
-    # trainer.train(sft_dataset)
-    
-    print("[Placeholder: SFT training loop runs here]")
+    trainer.train(train_ds=train_iter, skip_jit=False)
 
 print("Continuation Training Complete.")
 """)

@@ -40,7 +40,7 @@ All datasets feature explicit reasoning traces (`<think>` tags) distilled from f
 
 - **Library**: `google-tunix`, `flax`, `jax`
 - **Hardware**: Kaggle TPU VM v5e-8
-- **Method**: Full-weight SFT (not LoRA) for maximum quality
+- **Method**: LoRA (Low-Rank Adaptation) for efficient fine-tuning on consumer/Kaggle hardware
 - **Runtime**: ~8 hours processing 100K+ samples
 
 ### Key Insight
