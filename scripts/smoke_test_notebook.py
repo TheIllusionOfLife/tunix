@@ -73,6 +73,11 @@ def smoke_test_notebook(notebook_path):
     return True
 
 if __name__ == "__main__":
-    success = smoke_test_notebook("tunix_zero_cost_train.ipynb")
-    if not success:
+    notebooks = ["tunix_sft_train.ipynb", "tunix_sft_continuation.ipynb"]
+    all_passed = True
+    for nb in notebooks:
+        if not smoke_test_notebook(nb):
+            all_passed = False
+            
+    if not all_passed:
         sys.exit(1)

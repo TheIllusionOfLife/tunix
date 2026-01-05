@@ -112,26 +112,30 @@ print("Template variables defined.")
 !pip install -q tensorboardX
 !pip install -q transformers
 !pip install -q grain
-    # Tunix/Qwix Installation
-    # Check if we are offline (no internet), if so, assume wheels are attached
-    import socket
-    def is_connected():
-        try:
-            socket.create_connection(("1.1.1.1", 53))
-            return True
-        except OSError:
-            pass
-        return False
 
-    if is_connected():
-        !pip install "google-tunix[prod]==0.1.5"
-        !pip install git+https://github.com/google/qwix
-    else:
-        print("Offline mode detected. Assuming dependencies are installed or wheels provided.")
-        # Fallback: Try installing from local wheels if available
-        if os.path.exists("/kaggle/input/tunix-wheels"):
-            !pip install --no-index --find-links=/kaggle/input/tunix-wheels google-tunix
-            !pip install --no-index --find-links=/kaggle/input/tunix-wheels qwix
+# Tunix/Qwix Installation
+# Check if we are offline (no internet), if so, assume wheels are attached
+import socket
+import os
+
+def is_connected():
+    try:
+        # Check simple connectivity
+        socket.create_connection(("1.1.1.1", 53))
+        return True
+    except OSError:
+        pass
+    return False
+
+if is_connected():
+    !pip install "google-tunix[prod]==0.1.5"
+    !pip install git+https://github.com/google/qwix
+else:
+    print("Offline mode detected. Assuming dependencies are installed or wheels provided.")
+    # Fallback: Try installing from local wheels if available
+    if os.path.exists("/kaggle/input/tunix-wheels"):
+        !pip install --no-index --find-links=/kaggle/input/tunix-wheels google-tunix
+        !pip install --no-index --find-links=/kaggle/input/tunix-wheels qwix
 
 
 # Fix Flax Version to 0.12.0 as required
@@ -162,7 +166,10 @@ from pathlib import Path
 import qwix
 import tensorflow_datasets as tfds
 import datasets
+import tensorflow_datasets as tfds
+import datasets
 from tqdm.auto import tqdm
+import numpy as np
 
 # Tunix Imports
 from tunix.generate import sampler as sampler_lib
@@ -290,9 +297,16 @@ def standardize_to_gemma_format(text, question=None):
         # Enforce <answer> tags if missing (sometimes models output just the answer after start_of_turn)
         if "<answer>" not in text and "<start_of_turn>model" in text:
             # Heuristic: Wrap the last part of the model turn in answer tags if not present
-            # This is risky but better than missing tags. 
-            # Ideally the data source guarantees this, but for safety:
-            pass 
+            match = re.search(r"<start_of_turn>model\n(.*)$", text, re.DOTALL)
+            if match:
+                 content = match.group(1).strip()
+                 # If no reasoning tag either, wrap whole thing
+                 if "<reasoning>" not in content:
+                     text = text.replace(content, f"<answer>{content}</answer>")
+                 else:
+                     # Reasoning exists, so wrap whatever is after reasoning? 
+                     # Risk of breaking format. Best safe fallback is just appending expected structure if completely malformed
+                     pass 
         return text
     
     # For raw question/response pairs
@@ -603,7 +617,9 @@ def create_data_iterator(dataset, batch_size, tokenizer):
                 else:
                     pad_len = MAX_SEQ_LEN - len(tokens)
                     mask = [True] * len(tokens) + [False] * pad_len
-                    tokens = tokens + [0] * pad_len # 0 is usually pad, verify if needed
+                    # Use pad_id if available, else 0
+                    pad_id = getattr(tokenizer, 'pad_id', lambda: 0)()
+                    tokens = tokens + [pad_id] * pad_len # 0 is usually pad, verify if needed
                 
                 batch_input_tokens.append(tokens)
                 batch_input_mask.append(mask)

@@ -57,20 +57,23 @@ GRADIENT_ACCUMULATION = 16
 !pip install -q tensorboardX
 !pip install -q transformers
 !pip install -q grain
-    # Tunix/Qwix Installation
-    import socket
-    def is_connected():
-        try:
-            socket.create_connection(("1.1.1.1", 53))
-            return True
-        except OSError:
-            return False
 
-    if is_connected():
-        !pip install "google-tunix[prod]==0.1.5"
-        !pip install git+https://github.com/google/qwix
-    else:
-        print("Offline mode detected. Assuming legacy installation or wheels.")
+# Tunix/Qwix Installation
+import socket
+import os
+
+def is_connected():
+    try:
+        socket.create_connection(("1.1.1.1", 53))
+        return True
+    except OSError:
+        return False
+
+if is_connected():
+    !pip install "google-tunix[prod]==0.1.5"
+    !pip install git+https://github.com/google/qwix
+else:
+    print("Offline mode detected. Assuming legacy installation or wheels.")
 
 
 # Fix Flax Version
@@ -238,8 +241,16 @@ try:
     training_samples = []
     count = 0
     
-    system_prompt = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
-    
+    # helper for formatting
+    def standardize(text, question=None):
+        if "<start_of_turn>" in text:
+             text = text.replace("<think>", "<reasoning>").replace("</think>", "</reasoning>")
+             return text
+        # Simple fallback for Glaive
+        if question:
+             return f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{question}<end_of_turn>\\n<start_of_turn>model\\n<answer>{text}</answer>"
+        return text
+
     print(f"Collecting {NUM_SAMPLES} samples...")
     for sample in tqdm(glaive_ds):
         if count >= NUM_SAMPLES:
@@ -249,12 +260,13 @@ try:
         a = sample.get("output") or sample.get("answer")
         
         if q and a:
-            # Simple formatting using global variable if defined, or define consistency
-            # Note: In this continuation script, we define it here as it's a self-contained notebook cell
-            # But let's make it consistent with the main script
-            sys_prompt_str = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
+            # Use global SYSTEM_PROMPT defined in Vars Cell (we assume it's available or we redefine strictly)
+            # To be safe in a notebook, we'll re-use the variable name if available, else literal.
+            # But the Vars cell runs before this.
             
-            full_text = f"<start_of_turn>user\\n{sys_prompt_str}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n{a}"
+            # Use standardized formatting
+            full_text = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n<answer>{a}</answer>"
+            
             training_samples.append({"text": full_text})
             count += 1
             
@@ -327,7 +339,8 @@ def create_data_iterator(dataset, batch_size, tokenizer):
                 else:
                     pad_len = MAX_SEQ_LEN - len(tokens)
                     mask = [True] * len(tokens) + [False] * pad_len
-                    tokens = tokens + [0] * pad_len
+                    pad_id = getattr(tokenizer, 'pad_id', lambda: 0)()
+                    tokens = tokens + [pad_id] * pad_len
                 
                 batch_input_tokens.append(tokens)
                 batch_input_mask.append(mask)
