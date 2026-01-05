@@ -297,7 +297,7 @@ def standardize_to_gemma_format(text, question=None):
         # Enforce <answer> tags if missing (sometimes models output just the answer after start_of_turn)
         if "<answer>" not in text and "<start_of_turn>model" in text:
             # Heuristic: Wrap the last part of the model turn in answer tags if not present
-            match = re.search(r"<start_of_turn>model\n(.*)$", text, re.DOTALL)
+            match = re.search(r"<start_of_turn>model\\n(.*)$", text, re.DOTALL)
             if match:
                  content = match.group(1).strip()
                  # If no reasoning tag either, wrap whole thing
