@@ -326,8 +326,8 @@ print(f"JAX Devices: {jax.devices()}")
 PRETRAINED_PATH = None 
 MODEL_ID = "google/gemma-2-2b-it"
 DATASET_PATH = "/kaggle/input/tunix-public-data" 
-SFT_OUTPUT_DIR = "sft_checkpoint"
-GRPO_OUTPUT_DIR = "grpo_checkpoint"
+SFT_OUTPUT_DIR = "/kaggle/working/sft_checkpoint"
+GRPO_OUTPUT_DIR = "/kaggle/working/grpo_checkpoint"
 
 # Tuning Hyperparams
 GRPO_STEPS = 1500  # Optimized for single 9-hour TPU session
@@ -677,7 +677,7 @@ print("GRPO Completed.")
 # Since you can't upload during a run, save the files here.
 # Then, in a separate step (manual via Kaggle UI or API), create the Model from the output.
 
-FINAL_SAVE_DIR = "final_submission_model"
+FINAL_SAVE_DIR = "/kaggle/working/final_submission_model"
 os.makedirs(FINAL_SAVE_DIR, exist_ok=True)
 
 # Save the trained LoRA policy checkpoint

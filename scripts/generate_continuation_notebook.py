@@ -53,7 +53,7 @@ GRPO_STEPS = 800  # Increase for longer training
 TRAIN_MICRO_BATCH_SIZE = 1
 
 # Output directory for the final model
-FINAL_SAVE_DIR = "final_continuation_model"
+FINAL_SAVE_DIR = "/kaggle/working/final_continuation_model"
 
 # Your Kaggle Model ID (set this after uploading)
 unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-2b-unrestricted"
@@ -306,7 +306,7 @@ optimizer = optax.chain(
 )
 
 # Configs
-GRPO_OUTPUT_DIR = "grpo_continuation_checkpoint"
+GRPO_OUTPUT_DIR = "/kaggle/working/grpo_continuation_checkpoint"
 checkpointing_options = ocp.CheckpointManagerOptions(
     save_interval_steps=500, max_to_keep=2
 )
