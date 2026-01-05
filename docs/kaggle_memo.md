@@ -2,16 +2,11 @@
 
 ## 1. Prepare Data
 
-### Option A: Pre-upload Kaggle Dataset (Recommended)
+### Pre-upload Kaggle Dataset
 1. Download raw data from HuggingFace locally
 2. Keep original format (no preprocessing)
 3. Upload to Kaggle Datasets with source documentation
 4. Attach dataset to notebook
-
-### Option B: Download in Notebook
-1. Use HuggingFace `datasets` library
-2. Download at runtime (requires internet)
-3. Slower but proves public data usage
 
 ### Data Sources Documentation
 
@@ -26,6 +21,7 @@ Include a `DATA_SOURCES.md` in your Kaggle dataset:
 | OpenO1-SFT | huggingface.co/datasets/O1-OPEN/OpenO1-SFT | Apache 2.0 |
 | General_Inquiry_Thinking | huggingface.co/datasets/moremilk/General_Inquiry_Thinking-Chain-Of-Thought | MIT |
 | CoT-Collection | huggingface.co/datasets/pharaouk/CoT-Collection | CC-BY-4.0 |
+| glaiveai/reasoning-v1-20m | huggingface.co/datasets/glaiveai/reasoning-v1-20m | Apache 2.0 |
 ```
 
 ---
