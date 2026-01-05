@@ -20,10 +20,10 @@ Instead of reinforcement learning on verifiable tasks, we teach reasoning throug
 
 | Dataset | Samples | Strength |
 |:---|:---:|:---|
-| Raiden-DeepSeek-R1 | 62.9K | Creative/analytical - rare find |
+| Raiden-DeepSeek-R1 | 62.9K | Creative/analytical |
 | OpenO1-SFT | 20K | General reasoning diversity |
-| General_Inquiry_Thinking | 6K | Philosophical depth |
 | CoT-Collection | 10K | Commonsense/ethics |
+| glaiveai/reasoning-v1-20m | 30K | Math/Code/General - sampled |
 
 ---
 
@@ -61,8 +61,8 @@ All datasets use different tag formats:
 |:---|:---|
 | Raiden | DeepSeek-R1 format |
 | OpenO1 | `<Thought>...</Thought>` |
-| General_Inquiry | `metadata.reasoning` column |
 | CoT-Collection | `rationale` column |
+| GlaiveAI | `instruction` / `output` columns |
 
 **Target format**:
 ```
@@ -90,7 +90,6 @@ All datasets use different tag formats:
 With 22.2M samples, this dataset enables:
 - Deep fine-tuning across multiple epochs
 - Domain-specific filtering if needed
-- Curriculum learning (easy → hard)
 
 ---
 

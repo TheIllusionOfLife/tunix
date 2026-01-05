@@ -23,7 +23,7 @@ From FAQ #6:
 | Domain | Weight | Our Coverage |
 |:---|:---:|:---|
 | Creative/Analytical | High | ✅ 62.9K Raiden samples |
-| Philosophical/Ethics | High | ✅ 6K General + 10K CoT |
+| Philosophical/Ethics | High | ✅ 10K CoT |
 | Commonsense | Medium | ✅ CoT-Collection |
 | General Reasoning | Medium | ✅ 20K OpenO1 |
 | Math | Low | ⚠️ Not prioritized |

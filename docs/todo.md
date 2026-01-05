@@ -24,9 +24,8 @@ Strategy pivot: From GRPO on math/code to **SFT on diverse domains** with reason
 |:---|:---:|:---|:---|
 | sequelbox/Raiden-DeepSeek-R1 | 62.9K | Creative/analytical | Apache 2.0 |
 | O1-OPEN/OpenO1-SFT | 20K (sampled) | General reasoning | Apache 2.0 |
-| moremilk/General_Inquiry_Thinking | 6K | Philosophical/everyday | MIT |
-| pharaouk/CoT-Collection | 10K (filtered) | Commonsense/ethics | CC-BY-4.0 |
-| glaiveai/reasoning-v1-20m | Unlimited | Extended training | Apache 2.0 |
+| pharaouk/CoT-Collection | 10K | Commonsense/ethics | CC-BY-4.0 |
+| glaiveai/reasoning-v1-20m | 30K (sampled) | Math/Code/General | Apache 2.0 |
 
 **Note**: Download raw from HuggingFace, process in-notebook to prove public data usage.
 
@@ -34,9 +33,9 @@ Strategy pivot: From GRPO on math/code to **SFT on diverse domains** with reason
 
 ## 🗂️ Data Preparation
 
-- [ ] Create Kaggle dataset with raw data downloads
-- [ ] Write preprocessing code for each dataset format
-- [ ] Add source documentation for judge verification
+- [x] Create Kaggle dataset with raw data downloads
+- [x] Write preprocessing code for each dataset format
+- [x] Add source documentation for judge verification
 
 ### Format Standardization
 All datasets converted to:
@@ -52,8 +51,8 @@ All datasets converted to:
 
 ## ✅ Phase 1: Single Session (45 pts)
 
-- [ ] **Notebook**: Create `tunix_sft_train.ipynb`
-- [ ] **Data**: Raiden + OpenO1 + General + CoT (~100K samples)
+- [x] **Notebook**: Create `tunix_sft_train.ipynb`
+- [ ] **Data Loading**: Raiden + OpenO1 + CoT + GlaiveAI (~120K samples)
 - [ ] **Training**: SFT with 2-3 epochs
 - [ ] **Verify**: Check `<reasoning>` tags in outputs
 - [ ] **Save**: Checkpoint for unrestricted mode

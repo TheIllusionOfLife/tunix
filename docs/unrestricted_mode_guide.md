@@ -31,7 +31,7 @@ This guide explains how to extend training across multiple sessions for the 15 b
 
 1. Attach datasets:
    - `tunix-session1-checkpoint`
-   - `tunix-glaiveai-data` (or download in notebook)
+   - `tunix-glaiveai-data`
 
 2. Load checkpoint from session 1
 3. Continue SFT on glaiveai samples
@@ -72,6 +72,6 @@ Two options:
 
 | Session | Dataset | Samples |
 |:---|:---|:---:|
-| 1 | Raiden + OpenO1 + General + CoT | ~100K |
+| 1 | Raiden + OpenO1 + CoT + GlaiveAI (subset) | ~120K |
 | 2 | glaiveai/reasoning-v1-20m | 100K-500K |
 | 3 | (Depends on session 2 results) | Variable |

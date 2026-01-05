@@ -6,7 +6,7 @@ Downloads RAW data without preprocessing - formatting done in notebook.
 Datasets:
 1. Raiden-DeepSeek-R1 (62.9K creative/analytical)
 2. OpenO1-SFT (77.7K general reasoning)
-3. General_Inquiry_Thinking (6K philosophical)
+3. General_Inquiry_Thinking (6K philosophical) which turns out to be gated, so we can't use this.
 4. CoT-Collection (sampled, commonsense/ethics)
 5. glaiveai/reasoning-v1-20m (sampled for extended training)
 """

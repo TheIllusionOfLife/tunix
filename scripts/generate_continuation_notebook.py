@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+"""
+SFT Continuation Notebook Generator for Tunix Competition
+Strategy: Unrestricted Mode - Extended SFT on GlaiveAI
+
+Usage:
+    python scripts/generate_continuation_notebook.py
+"""
+
+import nbformat as nbf
+import os
+
+def create_notebook():
+    nb = nbf.v4.new_notebook()
+    
+    # --- Cell 1: Title ---
+    title_cell = nbf.v4.new_markdown_cell("""# Tunix SFT: Continuation Training (Unrestricted Mode)
+
+**Strategy**: Continue Supervised Fine-Tuning on a larger dataset (GlaiveAI) starting from the Session 1 checkpoint.
+
+**Prerequisites**:
+1. Run Session 1 notebook (`tunix_sft_train.ipynb`) and save output.
+2. Upload the Session 1 output as a Kaggle Dataset (e.g., `tunix-session1-checkpoint`).
+3. Attach that dataset to this notebook.
+""")
+
+    # --- Configuration Cell ---
+    config_cell = nbf.v4.new_code_cell("""
+# --- Configuration ---
+# Update these paths based on your Kaggle Dataset names
+
+# Path to checkpoint from Session 1 (Uploaded as Dataset)
+# Format: /kaggle/input/{dataset-name}/{folder-structure}
+# Typically: /kaggle/input/tunix-session1-checkpoint/final_sft_model/checkpoint
+PREV_CHECKPOINT_PATH = "/kaggle/input/tunix-session1-checkpoint/final_sft_model/checkpoint"
+
+# Path to new training data (GlaiveAI)
+# We will download it dynamically if not attached, or use attached.
+# For Unrestricted, we want the FULL GlaiveAI or a large chunk.
+DATASET_NAME = "glaiveai/reasoning-v1-20m" 
+
+# Training Config
+SFT_STEPS = 5000  # More steps for extended training
+LEARNING_RATE = 5e-6 # Lower LR for continuation
+TRAIN_BATCH_SIZE = 2
+GRADIENT_ACCUMULATION = 16
+""")
+
+    # --- Setup Cell ---
+    setup_cell = nbf.v4.new_code_cell("""
+# --- Setup & Install ---
+!pip install -q wandb==0.22.0
+!pip install -q kagglehub
+!pip install -q ipywidgets
+!pip install -q tensorflow
+!pip install -q tensorflow_datasets
+!pip install -q tensorboardX
+!pip install -q transformers
+!pip install -q grain
+!pip install "google-tunix[prod]==0.1.5"
+!pip install git+https://github.com/google/qwix
+
+# Fix Flax Version
+!pip uninstall -q -y flax
+!pip install flax==0.12.0
+!pip install -q datasets==3.2.0 optax==0.2.4 chex==0.1.88
+
+# --- Imports ---
+import functools
+import gc
+import os
+import re
+import time
+from flax import nnx
+import grain
+import jax
+import jax.numpy as jnp
+import kagglehub
+import optax
+from orbax import checkpoint as ocp
+import qwix
+import datasets
+from tqdm.auto import tqdm
+
+# Tunix Imports
+from tunix.generate import sampler as sampler_lib
+from tunix.generate import tokenizer_adapter as tokenizer_lib
+from tunix.models.gemma import model as gemma_lib
+from tunix.models.gemma import params as params_lib
+from tunix.sft import peft_trainer
+
+# Stability
+os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '0.95'
+jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
+print(f"JAX Devices: {jax.devices()}")
+
+# Constants
+MODEL_ID = "google/gemma-2-2b-it"
+SFT_OUTPUT_DIR = "/kaggle/working/sft_continuation_checkpoint"
+""")
+
+    # --- Model Utilities ---
+    model_utils_cell = nbf.v4.new_code_cell("""
+# --- Model Utilities ---
+MESH = [(8, 1), ("fsdp", "tp")]
+
+def get_gemma_model(ckpt_path):
+    # Load Base Model Structure
+    mesh = jax.make_mesh(*MESH)
+    model_config = gemma_lib.ModelConfig.gemma2_2b()
+    abs_gemma: nnx.Module = nnx.eval_shape(
+        lambda: gemma_lib.Transformer(model_config, rngs=nnx.Rngs(params=0))
+    )
+    abs_state = nnx.state(abs_gemma)
+    abs_state = jax.tree.map(
+        lambda a, s: jax.ShapeDtypeStruct(a.shape, jnp.bfloat16, sharding=s),
+        abs_state,
+        nnx.get_named_sharding(abs_state, mesh),
+    )
+    checkpointer = ocp.StandardCheckpointer()
+    restored_params = checkpointer.restore(ckpt_path, target=abs_state)
+
+    graph_def, _ = nnx.split(abs_gemma)
+    gemma = nnx.merge(graph_def, restored_params)
+    return gemma, mesh, model_config
+
+def get_lora_model(base_model, mesh):
+    # Tunix LoRA Config
+    RANK = 64
+    ALPHA = 64.0
+    lora_provider = qwix.LoraProvider(
+        module_path=(
+            ".*q_einsum|.*kv_einsum|.*gate_proj|.*down_proj|.*up_proj|"
+            ".*attn_vec_einsum"
+        ),
+        rank=RANK,
+        alpha=ALPHA,
+    )
+
+    model_input = base_model.get_model_input()
+    lora_model = qwix.apply_lora_to_model(
+        base_model, lora_provider, rngs=nnx.Rngs(params=0), **model_input
+    )
+
+    with mesh:
+        state = nnx.state(lora_model)
+        pspecs = nnx.get_partition_spec(state)
+        sharded_state = jax.lax.with_sharding_constraint(state, pspecs)
+        nnx.update(lora_model, sharded_state)
+
+    return lora_model
+""")
+
+    # --- Load Checkpoint Logic ---
+    load_ckpt_cell = nbf.v4.new_code_cell("""
+# --- Load Checkpoint & Prepare Model ---
+
+# 1. Download Base Model (for tokenizer & structure)
+if "KAGGLE_USERNAME" not in os.environ:
+    kagglehub.login()
+
+kaggle_ckpt_path = kagglehub.model_download(f"google/gemma-2/flax/gemma2-2b-it")
+
+# Prepare intermediate conversion
+INTERMEDIATE_CKPT_DIR = "/tmp/content/intermediate_ckpt/"
+if not os.path.exists(INTERMEDIATE_CKPT_DIR):
+    print("Converting base model checkpoint...")
+    params = params_lib.load_and_format_params(os.path.join(kaggle_ckpt_path, "gemma2-2b-it"))
+    gemma = gemma_lib.Transformer.from_params(params, version="2-2b-it")
+    checkpointer = ocp.StandardCheckpointer()
+    _, state = nnx.split(gemma)
+    checkpointer.save(os.path.join(INTERMEDIATE_CKPT_DIR, "state"), state)
+    checkpointer.wait_until_finished()
+    del params, gemma, state
+    gc.collect()
+
+# 2. Initialize Models
+print("Initializing Base Model...")
+base_model, mesh, model_config = get_gemma_model(os.path.join(INTERMEDIATE_CKPT_DIR, "state"))
+lora_model = get_lora_model(base_model, mesh=mesh)
+
+# 3. Load Previous Session State (LoRA weights)
+print(f"Restoring Session 1 Checkpoint from: {PREV_CHECKPOINT_PATH}")
+
+try:
+    # Map structure for LoRA params
+    abs_lora_params = jax.tree.map(
+        lambda x: jax.ShapeDtypeStruct(x.shape, x.dtype),
+        nnx.state(lora_model, nnx.LoRAParam),
+    )
+    
+    # Restore
+    prev_checkpointer = ocp.StandardCheckpointer()
+    restored_lora_params = prev_checkpointer.restore(PREV_CHECKPOINT_PATH, target=abs_lora_params)
+    
+    # Update model
+    nnx.update(lora_model, restored_lora_params)
+    print("✅ Successfully restored previous SFT state.")
+    
+except Exception as e:
+    print(f"❌ Failed to restore checkpoint: {e}")
+    print("Double check PREV_CHECKPOINT_PATH. If this is the first run, this is expected to fail.")
+    print("CRITICAL: Continuing without loaded state means restarting training from scratch!")
+    # raise e # Uncomment to enforce strict loading
+
+# 4. Tokenizer
+tokenizer = tokenizer_lib.Tokenizer(
+    tokenizer_path=os.path.join(kaggle_ckpt_path, "tokenizer.model")
+)
+""")
+
+    # --- Data Loading (GlaiveAI) ---
+    data_cell = nbf.v4.new_code_cell("""
+# --- Load Continuation Dataset (GlaiveAI) ---
+
+print("Loading GlaiveAI dataset (Streaming Mode)...")
+try:
+    # Stream a larger portion for Unrestricted Mode
+    # We'll take, say, the next 100k-200k samples, or shuffle and take
+    glaive_ds = datasets.load_dataset(DATASET_NAME, split="train", streaming=True)
+    
+    # Config
+    NUM_SAMPLES = 100000
+    
+    training_samples = []
+    count = 0
+    
+    system_prompt = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
+    
+    print(f"Collecting {NUM_SAMPLES} samples...")
+    for sample in tqdm(glaive_ds):
+        if count >= NUM_SAMPLES:
+            break
+            
+        q = sample.get("instruction") or sample.get("question")
+        a = sample.get("output") or sample.get("answer")
+        
+        if q and a:
+            # Simple formatting
+            full_text = f"<start_of_turn>user\\n{system_prompt}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n{a}"
+            training_samples.append({"text": full_text})
+            count += 1
+            
+    print(f"Collected {len(training_samples)} samples.")
+    
+    # Convert to HuggingFace Dataset for easy batching
+    sft_dataset = datasets.Dataset.from_list(training_samples)
+    
+except Exception as e:
+    print(f"Error loading GlaiveAI: {e}")
+    raise e
+""")
+
+    # --- Training Loop ---
+    train_cell = nbf.v4.new_code_cell("""
+# --- Continuation Training ---
+
+print("Starting SFT Continuation...")
+
+# Optimizer (Lower LR)
+schedule = optax.warmup_cosine_decay_schedule(
+    init_value=0.0,
+    peak_value=LEARNING_RATE,
+    warmup_steps=100,
+    decay_steps=SFT_STEPS,
+    end_value=1e-7
+)
+optimizer = optax.chain(
+    optax.clip_by_global_norm(1.0),
+    optax.adamw(learning_rate=schedule, weight_decay=0.01)
+)
+
+# Training Placeholder (Replace with Tunix Trainer)
+with mesh:
+    # num_epochs = 1 (since data is large)
+    # steps = SFT_STEPS
+    print(f"Target Steps: {SFT_STEPS}")
+    print(f"Learning Rate: {LEARNING_RATE}")
+    
+    # trainer = peft_trainer.PeftTrainer(...)
+    # trainer.train(sft_dataset)
+    
+    print("[Placeholder: SFT training loop runs here]")
+
+print("Continuation Training Complete.")
+""")
+
+    # --- Save Cell ---
+    save_cell = nbf.v4.new_code_cell("""
+# --- Save Continuation Model ---
+FINAL_SAVE_DIR = "/kaggle/working/final_continuation_model"
+os.makedirs(FINAL_SAVE_DIR, exist_ok=True)
+
+checkpointer = ocp.StandardCheckpointer()
+checkpointer.save(os.path.join(FINAL_SAVE_DIR, "checkpoint"), nnx.state(lora_model, nnx.LoRAParam))
+checkpointer.wait_until_finished()
+
+print(f"✅ Model saved to {FINAL_SAVE_DIR}")
+print("1. Download output.")
+print("2. Upload as Kaggle Model.")
+print("3. Update Unrestricted Model ID.")
+
+unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-sft-unrestricted"
+""")
+
+    nb.cells = [
+        title_cell,
+        config_cell,
+        setup_cell,
+        model_utils_cell,
+        load_ckpt_cell,
+        data_cell,
+        train_cell,
+        save_cell
+    ]
+
+    with open('tunix_sft_continuation.ipynb', 'w') as f:
+        nbf.write(nb, f)
+    
+    print("Notebook 'tunix_sft_continuation.ipynb' created successfully.")
+
+if __name__ == "__main__":
+    create_notebook()

@@ -6,8 +6,8 @@ Strategy: Supervised Fine-Tuning on diverse domain reasoning traces
 Datasets:
 - Raiden-DeepSeek-R1 (62.9K creative/analytical)
 - OpenO1-SFT (20K general reasoning)
-- General_Inquiry_Thinking (6K philosophical)
 - CoT-Collection (10K commonsense/ethics)
+- GlaiveAI-Reasoning (30K math/code/general)
 """
 
 import nbformat as nbf
@@ -26,13 +26,13 @@ def create_notebook():
 **Datasets**: 
 - Raiden-DeepSeek-R1 (Creative/Analytical)
 - OpenO1-SFT (General Reasoning)
-- General_Inquiry_Thinking (Philosophical)
 - CoT-Collection (Commonsense/Ethics)
+- GlaiveAI-Reasoning (Math/Code/General)
 """)
 
     # --- Strategy Cell ---
     strategy_cell = nbf.v4.new_markdown_cell("""
-## Your overall training and evaluation strategy
+## Overall training and evaluation strategy
 
 **Strategy: SFT on Diverse Domain Reasoning Traces**
 
@@ -48,8 +48,8 @@ graph LR
     A[Gemma-2B-IT] --> B{SFT Training}
     B -->|Creative| C[Raiden-DeepSeek-R1]
     B -->|Reasoning| D[OpenO1-SFT]
-    B -->|Philosophy| E[General_Inquiry]
-    B -->|Ethics| F[CoT-Collection]
+    B -->|Ethics| E[CoT-Collection]
+    B -->|General| F[GlaiveAI]
     C & D & E & F --> G[Trained Model]
     G --> H[Submission]
 ```
@@ -65,14 +65,14 @@ We employ a **Diverse Domain Strategy** using publicly available datasets with r
 |:---|:---|:---:|:---|:---|
 | Raiden-DeepSeek-R1 | HuggingFace | 62.9K | Creative/Analytical | Apache 2.0 |
 | OpenO1-SFT | HuggingFace | 20K | General Reasoning | Apache 2.0 |
-| General_Inquiry_Thinking | HuggingFace | 6K | Philosophical | MIT |
 | CoT-Collection | HuggingFace | 10K | Commonsense/Ethics | CC-BY-4.0 |
+| GlaiveAI-Reasoning | HuggingFace | 30K | Math/Code/General | Apache 2.0 |
 
 All datasets are downloaded and processed in-notebook to demonstrate public data usage.
 """)
 
     # --- Finetuning Header ---
-    finetuning_header = nbf.v4.new_markdown_cell("""## Your Tunix finetuning code""")
+    finetuning_header = nbf.v4.new_markdown_cell("""## Tunix finetuning code""")
 
     # --- Variables Cell ---
     vars_cell = nbf.v4.new_code_cell("""
@@ -276,13 +276,16 @@ def standardize_to_gemma_format(text, question=None):
         # Try to extract think/reasoning
         think_match = re.search(r"<think>(.*?)</think>", text, re.DOTALL)
         thought_match = re.search(r"<Thought>(.*?)</Thought>", text, re.DOTALL)
+        reasoning_tag_match = re.search(r"<reasoning>(.*?)</reasoning>", text, re.DOTALL)
         
         if think_match:
             reasoning = think_match.group(1).strip()
         elif thought_match:
             reasoning = thought_match.group(1).strip()
+        elif reasoning_tag_match:
+            reasoning = reasoning_tag_match.group(1).strip()
         else:
-            # Use the whole text as reasoning
+            # Use the whole text as reasoning if no specific tags found
             reasoning = text.strip()
         
         # Try to extract answer
@@ -294,10 +297,32 @@ def standardize_to_gemma_format(text, question=None):
             if answer_match:
                 answer = answer_match.group(1).strip()
             else:
-                # Last paragraph as answer
-                paragraphs = text.strip().split("\\n\\n")
-                answer = paragraphs[-1] if paragraphs else text[:200]
+                # If no explicit answer tag, assume the last paragraph is the answer
+                # or the whole text if reasoning was extracted from specific tags
+                if reasoning_tag_match or think_match or thought_match:
+                    # If reasoning was explicitly tagged, the rest is likely the answer
+                    # This is a heuristic and might need refinement for specific datasets
+                    remaining_text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL)
+                    remaining_text = re.sub(r"<think>.*?</think>", "", remaining_text, flags=re.DOTALL)
+                    remaining_text = re.sub(r"<Thought>.*?</Thought>", "", remaining_text, flags=re.DOTALL)
+                    answer = remaining_text.strip()
+                    if not answer and reasoning: # If no answer found, and reasoning was found, use reasoning as answer
+                        answer = reasoning
+                else:
+                    # If no specific tags for reasoning, and no answer tag,
+                    # try to split by paragraphs and take the last one as answer
+                    paragraphs = text.strip().split("\\n\\n")
+                    answer = paragraphs[-1] if paragraphs else text[:200] # Fallback to first 200 chars
         
+        # Ensure reasoning and answer are not empty
+        if not reasoning and answer:
+            reasoning = answer # If only answer, use it as reasoning
+        elif not answer and reasoning:
+            answer = reasoning # If only reasoning, use it as answer
+        elif not reasoning and not answer:
+            reasoning = text.strip()
+            answer = text.strip()
+
         formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{question}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{reasoning}</reasoning>\\n<answer>{answer}</answer>"
         return formatted
     
@@ -311,14 +336,49 @@ try:
     # Try loading from attached dataset
     if os.path.exists(DATASET_PATH):
         import glob
-        for jsonl_file in glob.glob(f"{DATASET_PATH}/*.jsonl"):
-            ds = datasets.load_dataset("json", data_files=jsonl_file, split="train")
-            print(f"Loaded {len(ds)} samples from {jsonl_file}")
-            for sample in ds:
-                text = sample.get("text", "")
-                if text:
-                    formatted = standardize_to_gemma_format(text)
+        # Load Parquet files (Preferred)
+        for parquet_file in glob.glob(f"{DATASET_PATH}/*.parquet"):
+            ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
+            print(f"Loaded {len(ds)} samples from {parquet_file}")
+            
+            # Identify dataset type based on filename
+            fname = os.path.basename(parquet_file).lower()
+            
+            # 1. CoT-Collection
+            if "cot_collection" in fname:
+                # CoT Collection: source (q), rationale (r), target (a)
+                for sample in ds:
+                    q = sample.get("source", "")
+                    r = sample.get("rationale", "")
+                    a = sample.get("target", "")
+                    formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{r}</reasoning>\\n<answer>{a}</answer>"
                     all_texts.append({"text": formatted})
+
+            # 2. GlaiveAI-Reasoning
+            elif "glaive" in fname:
+                # Glaive: instruction/question, output/answer (sometimes with tags, sometimes not)
+                for sample in ds:
+                    q = sample.get("question", sample.get("instruction", ""))
+                    a = sample.get("answer", sample.get("output", ""))
+                    # Glaive usually has everything in answer, but if not we format standard
+                    formatted = standardize_to_gemma_format(a, question=q)
+                    all_texts.append({"text": formatted})
+
+            # 3. Raiden / OpenO1 (Standard formatted or text column)
+            else: 
+                for sample in ds:
+                     # Check if pre-formatted 'text' field exists
+                     if "text" in sample:
+                         formatted = standardize_to_gemma_format(sample["text"])
+                         all_texts.append({"text": formatted})
+                     # Fallback to instruction/response pair
+                     elif ("prompt" in sample and "response" in sample):
+                         formatted = standardize_to_gemma_format(sample["response"], question=sample["prompt"])
+                         all_texts.append({"text": formatted})
+                     elif ("instruction" in sample and "output" in sample):
+                         formatted = standardize_to_gemma_format(sample["output"], question=sample["instruction"])
+                         all_texts.append({"text": formatted})
+
     else:
         print(f"Dataset path {DATASET_PATH} not found. Downloading from HuggingFace...")
         
@@ -345,6 +405,19 @@ try:
                     all_texts.append({"text": formatted})
         except Exception as e:
             print(f"Skipping OpenO1: {e}")
+
+        # 3. GlaiveAI-Reasoning
+        try:
+            glaive = datasets.load_dataset("glaiveai/reasoning-v1-20m", split="train[:10000]")
+            print(f"Downloaded GlaiveAI: {len(glaive)} samples")
+            for sample in glaive:
+                instruction = sample.get("instruction", "")
+                output = sample.get("output", "")
+                if instruction and output:
+                    formatted = standardize_to_gemma_format(output, question=instruction)
+                    all_texts.append({"text": formatted})
+        except Exception as e:
+            print(f"Skipping GlaiveAI: {e}")
 
     print(f"Total samples after preprocessing: {len(all_texts)}")
     
@@ -560,12 +633,11 @@ except Exception as e:
 unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-sft"
 
 print(f"Unrestricted Mode Model ID: {unrestricted_kaggle_model}")
-print("Make sure to upload the checkpoint from /kaggle/working/final_sft_model/")
 """)
 
     # --- Other Info Cell ---
     other_info = nbf.v4.new_markdown_cell("""
-## Other things you want the judges to know
+## Other things I want the judges to know
 
 ### 1. Learnings
 *   **Domain Matters More Than Method**: Competition FAQ explicitly states verifiable tasks (math/code) have "much lower weights". We prioritized diverse domains (creative, analytical, philosophical) over math/code.
@@ -575,8 +647,8 @@ print("Make sure to upload the checkpoint from /kaggle/working/final_sft_model/"
 ### 2. Data Sources (All Public, Apache 2.0/MIT/CC-BY)
 *   sequelbox/Raiden-DeepSeek-R1 - Creative & analytical reasoning
 *   O1-OPEN/OpenO1-SFT - General reasoning with explicit <Thought>/<Output> tags
-*   moremilk/General_Inquiry_Thinking-Chain-Of-Thought - Philosophical & everyday questions
 *   pharaouk/CoT-Collection - Commonsense & ethics tasks
+*   glaiveai/reasoning-v1-20m - Math/Code/General tasks
 
 ### 3. Key Design Decisions
 *   **Format Standardization**: All datasets converted to consistent `<reasoning>`/`<answer>` tags

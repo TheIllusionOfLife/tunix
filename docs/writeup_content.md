@@ -31,8 +31,8 @@ We prioritized **non-verifiable domains** (creative, analytical, philosophical) 
 #### Datasets Used
 - **Raiden-DeepSeek-R1**: 62.9K creative & analytical samples
 - **OpenO1-SFT**: 20K general reasoning samples
-- **General_Inquiry_Thinking**: 6K philosophical & everyday queries
 - **CoT-Collection**: 10K commonsense & ethics tasks
+- **GlaiveAI-Reasoning**: 30K sampled math/code/general tasks
 
 All datasets feature explicit reasoning traces (`<think>` tags) distilled from frontier models.
 
@@ -49,7 +49,7 @@ All datasets feature explicit reasoning traces (`<think>` tags) distilled from f
 
 ### Unrestricted Mode
 
-For bonus points, we extended training using the massive glaiveai/reasoning-v1-20m dataset (22.2M samples) across multiple sessions.
+For bonus points, we continue training using the remaining massive glaiveai/reasoning-v1-20m dataset (22.2M samples) across multiple sessions.
 
 ---
 

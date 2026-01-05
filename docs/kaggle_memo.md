@@ -19,7 +19,6 @@ Include a `DATA_SOURCES.md` in your Kaggle dataset:
 |:---|:---|:---|
 | Raiden-DeepSeek-R1 | huggingface.co/datasets/sequelbox/Raiden-DeepSeek-R1 | Apache 2.0 |
 | OpenO1-SFT | huggingface.co/datasets/O1-OPEN/OpenO1-SFT | Apache 2.0 |
-| General_Inquiry_Thinking | huggingface.co/datasets/moremilk/General_Inquiry_Thinking-Chain-Of-Thought | MIT |
 | CoT-Collection | huggingface.co/datasets/pharaouk/CoT-Collection | CC-BY-4.0 |
 | glaiveai/reasoning-v1-20m | huggingface.co/datasets/glaiveai/reasoning-v1-20m | Apache 2.0 |
 ```
