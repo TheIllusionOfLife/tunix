@@ -7,7 +7,7 @@
 | **Notebook Quality** | ~15 | Clean code, clear documentation |
 | **Video Quality** | ~15 | Clear explanation of SFT strategy |
 | **Model Quality** | 45 | SFT on diverse reasoning traces |
-| **Unrestricted Mode** | +15 | Extended SFT across sessions |
+| **Unrestricted Mode** | +15 | Extended SFT with fresh 100K samples |
 | **Total** | **90** | |
 
 ---
@@ -23,9 +23,10 @@ From FAQ #6:
 | Domain | Weight | Our Coverage |
 |:---|:---:|:---|
 | Creative/Analytical | High | ✅ 62.9K Raiden samples |
-| Philosophical/Ethics | High | ✅ 10K CoT |
+| Philosophical/Ethics | High | ✅ 10K CoT (pre-sampled) |
 | Commonsense | Medium | ✅ CoT-Collection |
-| General Reasoning | Medium | ✅ 20K OpenO1 |
+| General Reasoning | Medium | ✅ 20K OpenO1 (English-only) |
+| Non-math/code | Medium | ✅ 30K GlaiveAI |
 | Math | Low | ⚠️ Not prioritized |
 | Coding | Low | ⚠️ Not prioritized |
 
@@ -43,10 +44,22 @@ From FAQ #6:
 
 | Factor | GRPO | SFT |
 |:---|:---|:---|
-| **Samples/9hr** | ~1,500 | ~100,000 |
+| **Samples/9hr** | ~1,500 | ~123,000 |
 | **Domain Coverage** | Math/Code only | Diverse |
 | **Competition Alignment** | Low-weight domains | High-weight domains |
 | **2B Model Suitability** | Questionable | Better |
+
+---
+
+## Our Dataset Strategy
+
+| Dataset | Full Size | Included | Method |
+|:---|---:|---:|:---|
+| Raiden-DeepSeek-R1 | 62,925 | 62,925 | Full |
+| OpenO1-SFT | 77,685 | 20,000 | English filter + Random |
+| CoT-Collection | 1,837,928 | 10,000 | Reservoir sampling |
+| GlaiveAI | 22,200,000+ | 30,000 | First N |
+| **Total** | - | **~123K** | |
 
 ---
 
@@ -58,3 +71,4 @@ From FAQ #6:
 | Format compliance drops | Data has explicit reasoning tags |
 | Worse at math | Acceptable - low competition weight |
 | Dataset quality varies | Multiple datasets for redundancy |
+| Chinese leakage | Pre-filtered English-only OpenO1 |

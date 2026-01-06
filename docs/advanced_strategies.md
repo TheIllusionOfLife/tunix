@@ -15,15 +15,28 @@ Instead of reinforcement learning on verifiable tasks, we teach reasoning throug
 2. **Format**: Explicit reasoning traces (`<think>`, `<Thought>`, etc.)
 3. **Quality**: Distilled from frontier models (R1, O1, etc.)
 4. **License**: Apache 2.0, MIT, or CC-BY
+5. **Language**: English-only (Chinese filtered out)
 
-### Dataset Mix (100K target)
+### Dataset Mix (~123K samples)
 
-| Dataset | Samples | Strength |
-|:---|:---:|:---|
-| Raiden-DeepSeek-R1 | 62.9K | Creative/analytical |
-| OpenO1-SFT | 20K | General reasoning diversity |
-| CoT-Collection | 10K | Commonsense/ethics |
-| glaiveai/reasoning-v1-20m | 30K | Math/Code/General - sampled |
+| Dataset | Samples | Method | Strength |
+|:---|:---:|:---|:---|
+| Raiden-DeepSeek-R1 | 62.9K | Full | Creative/analytical |
+| OpenO1-SFT | 20K | English + Random | General reasoning |
+| CoT-Collection | 10K | Reservoir sampling | Commonsense/ethics |
+| GlaiveAI | 30K | First N | Non-math/code |
+
+---
+
+## Pre-sampling Scripts
+
+| Script | Output | Size |
+|:---|:---|:---|
+| `scripts/sample_openo1_english.py` | `openo1_sft_english_20k.parquet` | 44.8 MB |
+| `scripts/sample_cot_collection.py` | `cot_collection_10k.parquet` | 6.6 MB |
+| `scripts/sample_glaiveai_continuation.py` | `glaiveai_continuation_100k.parquet` | 365.2 MB |
+
+All scripts use `seed=42` for reproducibility.
 
 ---
 
@@ -36,18 +49,18 @@ Instead of reinforcement learning on verifiable tasks, we teach reasoning throug
 | **Full SFT** | Maximum quality | Higher memory, slower |
 | **LoRA** | Efficient, stable | May underfit |
 
-**Recommendation**: Start with LoRA for speed, upgrade to full SFT if memory allows.
+**Current**: LoRA for speed and stability.
 
 ### Hyperparameters
 
 ```python
 SFT_CONFIG = {
-    "learning_rate": 2e-5,
-    "batch_size": 2-4,  # Memory dependent
-    "epochs": 2-3,
-    "max_seq_length": 1024-2048,
-    "weight_decay": 0.01,
-    "warmup_ratio": 0.1,
+    "learning_rate": 2e-5,       # Session 1
+    "continuation_lr": 5e-6,     # Session 2 (lower)
+    "batch_size": 2,
+    "gradient_accumulation": 16,  # Effective batch = 32
+    "max_seq_length": 1024,
+    "warmup_steps": 100,
 }
 ```
 
@@ -57,16 +70,18 @@ SFT_CONFIG = {
 
 All datasets use different tag formats:
 
-| Dataset | Format |
-|:---|:---|
-| Raiden | DeepSeek-R1 format |
-| OpenO1 | `<Thought>...</Thought>` |
-| CoT-Collection | `rationale` column |
-| GlaiveAI | `instruction` / `output` columns |
+| Dataset | Original Format | Standardized To |
+|:---|:---|:---|
+| Raiden | DeepSeek-R1 style | `<reasoning>...<answer>` |
+| OpenO1 | `<Thought>...<Output>` | `<reasoning>...<answer>` |
+| CoT-Collection | `rationale` column | `<reasoning>...<answer>` |
+| GlaiveAI | `<think>` only | `<reasoning>...<answer>` |
 
 **Target format**:
 ```
 <start_of_turn>user
+{system_prompt}
+
 {question}<end_of_turn>
 <start_of_turn>model
 <reasoning>{trace}</reasoning>
@@ -79,17 +94,19 @@ All datasets use different tag formats:
 
 ### Session Allocation
 
-| Session | Focus | Data Size |
-|:---|:---|:---:|
-| 1 | Core diverse reasoning | 100K |
-| 2 | Extended coverage | 100K-500K |
-| 3 | Polish or specialization | Variable |
+| Session | Focus | Data Size | Source |
+|:---|:---|:---:|:---|
+| 1 | Core diverse reasoning | ~123K | tunix-sft-data |
+| 2 | Extended coverage | 100K | tunix-sft-continuation-data |
+| 3 | Polish (optional) | Variable | More GlaiveAI or GRPO |
 
-### glaiveai/reasoning-v1-20m
+### Fresh Data Principle
 
-With 22.2M samples, this dataset enables:
-- Deep fine-tuning across multiple epochs
-- Domain-specific filtering if needed
+Continuation training uses **non-overlapping** samples:
+- Session 1: GlaiveAI samples 1-30,000
+- Session 2: GlaiveAI samples 30,001-130,000
+
+This prevents overfitting and maximizes diversity.
 
 ---
 

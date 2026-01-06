@@ -12,6 +12,18 @@
 
 ---
 
+## Data Overhead Eliminated
+
+With pre-sampled parquet files, we eliminate:
+- ❌ Streaming from HuggingFace
+- ❌ Runtime reservoir sampling
+- ❌ Chinese character filtering
+- ❌ Thrift deserialization errors (large files)
+
+**Result**: All 9 hours dedicated to training.
+
+---
+
 ## SFT vs GRPO Resource Usage
 
 | Metric | GRPO | SFT |
@@ -28,9 +40,9 @@ SFT is dramatically more efficient for sample throughput.
 
 | Time | Activity | Notes |
 |:---|:---|:---|
-| 0:00-0:30 | Setup & imports | Install Tunix, load model |
-| 0:30-1:00 | Data preprocessing | Load & format 100K samples |
-| 1:00-8:00 | SFT Training | ~100K samples, 2-3 epochs |
+| 0:00-0:15 | Setup & imports | Install Tunix, load model |
+| 0:15-0:30 | Data loading | Load pre-sampled parquets (~123K) |
+| 0:30-8:00 | SFT Training | ~123K samples, 2-3 epochs |
 | 8:00-8:30 | Checkpoint save | Save to output dir |
 | 8:30-9:00 | Inference test | Generate sample outputs |
 
@@ -64,12 +76,12 @@ SFT is dramatically more efficient for sample throughput.
 | Session | Duration | Cumulative |
 |:---|:---:|:---:|
 | 1 (Main) | 9h | 9h |
-| 2 | 8h | 17h |
-| 3 | 3h | 20h |
+| 2 (Continuation) | 8h | 17h |
+| 3 (Optional) | 3h | 20h |
 
 ### Session 2-3 Strategy
 
-- **Session 2**: Load checkpoint, continue SFT on glaiveai data
+- **Session 2**: Load checkpoint, continue SFT on 100K fresh GlaiveAI
 - **Session 3**: Either more SFT or GRPO polish
 
 ---
@@ -77,13 +89,13 @@ SFT is dramatically more efficient for sample throughput.
 ## Checkpointing Strategy
 
 Save checkpoints at:
-- Every 1000 steps (during training)
+- Every 500-1000 steps (during training)
 - End of session (for continuation)
 
 ```python
 checkpointing_options = ocp.CheckpointManagerOptions(
-    save_interval_steps=1000,
-    max_to_keep=3,
+    save_interval_steps=500,
+    max_to_keep=2,
 )
 ```
 
@@ -94,6 +106,6 @@ checkpointing_options = ocp.CheckpointManagerOptions(
 | Issue | Solution |
 |:---|:---|
 | OOM during training | Reduce batch size or seq length |
-| Session timeout | Checkpoint auto-saves every 1000 steps |
-| Data preprocessing slow | Pre-upload processed data |
+| Session timeout | Checkpoint auto-saves every 500 steps |
+| Parquet load error | Fallback to HuggingFace streaming |
 | Model diverges | Reduce learning rate, add warmup |

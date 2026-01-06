@@ -6,6 +6,7 @@ Strategy pivot: From GRPO on math/code to **SFT on diverse domains** with reason
 - **Strategy**: [Scoring Breakdown](scoring_breakdown.md) | [Advanced Strategies](advanced_strategies.md)
 - **Execution**: [Kaggle Memo](kaggle_memo.md) | [TPU Resource Plan](tpu_resource_plan.md)
 - **Submission**: [Unrestricted Guide](unrestricted_mode_guide.md) | [Writeup Content](writeup_content.md) | [Video Script](video_script.md)
+- **Data**: [DATA_SOURCES.md](../data/DATA_SOURCES.md)
 - **Archive**: [GRPO Strategy Docs](../archive/) (backup if we revert)
 
 ---
@@ -18,29 +19,35 @@ Strategy pivot: From GRPO on math/code to **SFT on diverse domains** with reason
 
 ---
 
-## 📦 Datasets to Use
+## 📦 Datasets (Pre-sampled)
 
-| Dataset | Samples | Domain Focus | License |
+| Parquet File | Samples | Source | Method |
 |:---|:---:|:---|:---|
-| sequelbox/Raiden-DeepSeek-R1 | 62.9K | Creative/analytical | Apache 2.0 |
-| O1-OPEN/OpenO1-SFT | 20K (sampled) | General reasoning | Apache 2.0 |
-| pharaouk/CoT-Collection | 10K | Commonsense/ethics | CC-BY-4.0 |
-| glaiveai/reasoning-v1-20m | 30K (sampled) | Math/Code/General | Apache 2.0 |
-
-**Note**: Download raw from HuggingFace, process in-notebook to prove public data usage.
+| `raiden_deepseek_r1.parquet` | 62,925 | sequelbox/Raiden-DeepSeek-R1 | Full |
+| `openo1_sft_english_20k.parquet` | 20,000 | O1-OPEN/OpenO1-SFT | English + Random |
+| `cot_collection_10k.parquet` | 10,000 | pharaouk/CoT-Collection | Reservoir |
+| `glaiveai_30k.parquet` | 30,000 | glaiveai/reasoning-v1-20m | First N |
+| **Total (Session 1)** | **~123K** | | |
+| `glaiveai_continuation_100k.parquet` | 100,000 | glaiveai/reasoning-v1-20m | Samples 30K-130K |
 
 ---
 
 ## 🗂️ Data Preparation
 
-- [x] Create Kaggle dataset with raw data downloads
-- [x] Write preprocessing code for each dataset format
-- [x] Add source documentation for judge verification
+- [x] Create pre-sampling scripts for each dataset
+- [x] Generate `cot_collection_10k.parquet` (reservoir sampling)
+- [x] Generate `openo1_sft_english_20k.parquet` (English filter + random)
+- [x] Generate `glaiveai_continuation_100k.parquet` (fresh 100K)
+- [x] Update `DATA_SOURCES.md` with full/included/method
+- [ ] Upload parquets to Kaggle dataset: `tunix-sft-data`
+- [ ] Upload continuation parquet to: `tunix-sft-continuation-data`
 
 ### Format Standardization
 All datasets converted to:
 ```
 <start_of_turn>user
+{system_prompt}
+
 {question}<end_of_turn>
 <start_of_turn>model
 <reasoning>{trace}</reasoning>
@@ -52,8 +59,10 @@ All datasets converted to:
 ## ✅ Phase 1: Single Session (45 pts)
 
 - [x] **Notebook**: Create `tunix_sft_train.ipynb`
-- [ ] **Data Loading**: Raiden + OpenO1 + CoT + GlaiveAI (~120K samples)
-- [ ] **Training**: SFT with 2-3 epochs
+- [x] **Data Loading**: Pre-sampled parquets (~123K samples)
+- [x] **Smoke Test**: Syntax validation passing
+- [ ] **Upload**: Parquets to Kaggle dataset
+- [ ] **Training**: Run on Kaggle TPU
 - [ ] **Verify**: Check `<reasoning>` tags in outputs
 - [ ] **Save**: Checkpoint for unrestricted mode
 
@@ -61,8 +70,11 @@ All datasets converted to:
 
 ## 🚀 Phase 2: Unrestricted Mode (+15 pts)
 
-- [ ] **Session 2**: Continue SFT on glaiveai dataset
-- [ ] **Session 3**: More SFT or optional GRPO polish
+- [x] **Data**: Generate 100K fresh GlaiveAI samples
+- [x] **Notebook**: Update `tunix_sft_continuation.ipynb`
+- [ ] **Session 1 Output**: Upload as `tunix-session1-checkpoint`
+- [ ] **Session 2**: Run continuation training
+- [ ] **Session 3**: Optional polish
 - [ ] **Upload**: Final model to Kaggle Models
 
 ---
@@ -72,3 +84,14 @@ All datasets converted to:
 - [ ] **Video**: Record < 3 min demo
 - [ ] **Writeup**: Submit with notebook
 - [ ] **Attach**: Video + notebook to writeup
+
+---
+
+## 🛠️ Tooling
+
+- [x] `scripts/generate_sft_submission.py` - Main notebook generator
+- [x] `scripts/generate_continuation_notebook.py` - Continuation generator
+- [x] `scripts/smoke_test_notebook.py` - Pre-flight syntax check
+- [x] `scripts/sample_cot_collection.py` - CoT reservoir sampler
+- [x] `scripts/sample_openo1_english.py` - OpenO1 English filter
+- [x] `scripts/sample_glaiveai_continuation.py` - Continuation data sampler
