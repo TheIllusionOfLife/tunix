@@ -31,19 +31,20 @@ def create_notebook():
 
 # Path to checkpoint from Session 1 (Uploaded as Dataset)
 # Format: /kaggle/input/{dataset-name}/{folder-structure}
-# Typically: /kaggle/input/tunix-session1-checkpoint/final_sft_model/checkpoint
 PREV_CHECKPOINT_PATH = "/kaggle/input/tunix-session1-checkpoint/final_sft_model/checkpoint"
 
-# Path to new training data (GlaiveAI)
-# We will download it dynamically if not attached, or use attached.
-# For Unrestricted, we want the FULL GlaiveAI or a large chunk.
-DATASET_NAME = "glaiveai/reasoning-v1-20m" 
+# Path to continuation training data (Fresh GlaiveAI samples - NOT overlapping with session 1)
+# This is a NEW Kaggle dataset containing 100K samples from GlaiveAI (skipped first 30K used in session 1)
+CONTINUATION_DATA_PATH = "/kaggle/input/tunix-sft-continuation-data"
 
 # Training Config
 SFT_STEPS = 5000  # More steps for extended training
 LEARNING_RATE = 5e-6 # Lower LR for continuation
 TRAIN_BATCH_SIZE = 2
 GRADIENT_ACCUMULATION = 16
+
+# System Prompt (must match session 1)
+SYSTEM_PROMPT = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
 """)
 
     # --- Setup Cell ---
@@ -225,86 +226,66 @@ tokenizer = tokenizer_lib.Tokenizer(
 )
 """)
 
-    # --- Data Loading (GlaiveAI) ---
+    # --- Data Loading (Pre-sampled GlaiveAI Parquet) ---
     data_cell = nbf.v4.new_code_cell("""
-# --- Load Continuation Dataset (GlaiveAI) ---
+# --- Load Continuation Dataset (Pre-sampled GlaiveAI) ---
+# This parquet file contains 100K fresh samples from GlaiveAI
+# (samples 30,001 - 130,000, NOT overlapping with single session)
 
-print("Loading GlaiveAI dataset (Streaming Mode)...")
+import glob
+import re
+
+print(f"Loading continuation data from {CONTINUATION_DATA_PATH}...")
+
+all_texts = []
+
+def standardize_to_gemma_format(text, question=None):
+    '''Standardize GlaiveAI format to Gemma conversation format'''
+    # Replace GlaiveAI's <think> tags with our <reasoning> tags
+    text = re.sub(r"<think>", "<reasoning>", text, flags=re.IGNORECASE)
+    text = re.sub(r"</think>", "</reasoning>", text, flags=re.IGNORECASE)
+    
+    # If no <answer> tag, wrap the part after </reasoning>
+    if "<reasoning>" in text and "<answer>" not in text:
+        parts = text.split("</reasoning>")
+        if len(parts) > 1:
+            reasoning_part = parts[0] + "</reasoning>"
+            answer_part = parts[1].strip()
+            if answer_part:
+                text = f"{reasoning_part}\\n<answer>{answer_part}</answer>"
+    
+    # Build full conversation format
+    if question:
+        formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{question}<end_of_turn>\\n<start_of_turn>model\\n{text}"
+        return formatted
+    return text
+
+# Load parquet files from continuation dataset
 try:
-    # Stream a larger portion for Unrestricted Mode
-    # We'll take, say, the next 100k-200k samples, or shuffle and take
-    glaive_ds = datasets.load_dataset(DATASET_NAME, split="train", streaming=True)
-    
-    # Config
-    NUM_SAMPLES = 100000
-    
-    training_samples = []
-    count = 0
-    
-    # helper for formatting
-    def standardize(text, question=None):
-        if "<start_of_turn>" in text:
-             text = text.replace("<think>", "<reasoning>").replace("</think>", "</reasoning>")
-             return text
-        # Simple fallback for Glaive
-        if question:
-             return f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{question}<end_of_turn>\\n<start_of_turn>model\\n<answer>{text}</answer>"
-        return text
-
-    print(f"Collecting {NUM_SAMPLES} samples...")
-    for sample in tqdm(glaive_ds):
-        if count >= NUM_SAMPLES:
-            break
-            
-        q = sample.get("instruction") or sample.get("question")
-        a = sample.get("output") or sample.get("answer")
+    for parquet_file in glob.glob(f"{CONTINUATION_DATA_PATH}/*.parquet"):
+        ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
+        print(f"Loaded {len(ds)} samples from {parquet_file}")
         
-    print(f"Collecting {NUM_SAMPLES} samples...")
-    for sample in tqdm(glaive_ds):
-        if count >= NUM_SAMPLES:
-            break
+        for sample in ds:
+            q = sample.get("prompt", "")
+            a = sample.get("response", "")
             
-        # Glaive uses 'prompt' and 'response'
-        q = sample.get("prompt") or sample.get("question") or sample.get("instruction")
-        a = sample.get("response") or sample.get("output") or sample.get("answer")
-        
-        if q and a:
-            # Use global SYSTEM_PROMPT defined in Vars Cell (we assume it's available or we redefine strictly)
-            # To be safe in a notebook, we'll re-use the variable name if available, else literal.
-            # But the Vars cell runs before this.
-            
-            # Use standardized formatting
-            # Note: Glaive response has <think>... we need to ensure standardize handles it.
-            # Our standardize helper in this file is simple: replace <think> with <reasoning>.
-            # It DOES NOT handle missing <answer> tags for the rest of the text.
-            # We need to enhance the helper inside this notebook generator.
-            
-            # Enhanced standardization for this notebook
-            text = a
-            if "<think>" in text:
-                text = text.replace("<think>", "<reasoning>").replace("</think>", "</reasoning>")
-            
-            # If no <answer> tag, wrap the part after reasoning
-            if "<reasoning>" in text and "<answer>" not in text:
-                 parts = text.split("</reasoning>")
-                 if len(parts) > 1:
-                     reasoning_part = parts[0] + "</reasoning>"
-                     answer_part = parts[1].strip()
-                     text = f"{reasoning_part}\\n<answer>{answer_part}</answer>"
-            
-            full_text = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n{text}"
-            
-            training_samples.append({"text": full_text})
-            count += 1
-            
-    print(f"Collected {len(training_samples)} samples.")
+            if q and a:
+                formatted = standardize_to_gemma_format(a, question=q)
+                all_texts.append({"text": formatted})
     
-    # Convert to HuggingFace Dataset for easy batching
-    sft_dataset = datasets.Dataset.from_list(training_samples)
+    print(f"Total continuation samples: {len(all_texts)}")
+    
+    # Create HuggingFace dataset
+    sft_dataset = datasets.Dataset.from_list(all_texts)
+    sft_dataset = sft_dataset.shuffle(seed=42)
+    
+    # Show sample
+    print(f"\\nSample: {sft_dataset[0]['text'][:500]}...")
     
 except Exception as e:
-    print(f"Error loading GlaiveAI: {e}")
-    raise e
+    print(f"CRITICAL: Failed to load continuation data: {e}")
+    raise RuntimeError(f"Dataset loading failed: {e}")
 """)
 
     # --- Training Loop ---
