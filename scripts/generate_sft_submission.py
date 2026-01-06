@@ -192,9 +192,9 @@ DATASET_PATH = "/kaggle/input/tunix-sft-data"
 SFT_OUTPUT_DIR = "/kaggle/working/sft_checkpoint"
 
 # Tuning Hyperparams
-SFT_STEPS = 3000  # ~100K samples with batch_size ~32/epoch
-TRAIN_BATCH_SIZE = 2
-GRADIENT_ACCUMULATION = 16
+SFT_STEPS = 4000  # Increased for full epoch coverage (>128k samples)
+TRAIN_BATCH_SIZE = 8 # Global batch size (1 per device on 8 chips)
+GRADIENT_ACCUMULATION = 4
 EFFECTIVE_BATCH = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION  # 32
 """)
 
@@ -443,19 +443,25 @@ try:
         print(f"Dataset path {DATASET_PATH} not found. Downloading from HuggingFace...")
         
         # Fallback: Download from HuggingFace
-        # 1. Raiden-DeepSeek-R1 (main dataset)
-        raiden = datasets.load_dataset("sequelbox/Raiden-DeepSeek-R1", split="train[:20000]")
+        # 1. Raiden-DeepSeek-R1 (main dataset) - Full dataset
+        raiden = datasets.load_dataset("sequelbox/Raiden-DeepSeek-R1", split="train") 
         print(f"Downloaded Raiden: {len(raiden)} samples")
         for sample in raiden:
             prompt = sample.get("prompt", "")
             response = sample.get("response", sample.get("completion", ""))
+            
+            # Filter: Skip infinite loops (>8000 chars) or empty/short samples
+            if len(response) > 8000 or len(response) < 50:
+                continue
+                
             if prompt and response:
                 formatted = standardize_to_gemma_format(response, question=prompt)
                 all_texts.append({"text": formatted})
         
-            # 2. OpenO1-SFT
+        # 2. OpenO1-SFT
         try:
-            openo1 = datasets.load_dataset("O1-OPEN/OpenO1-SFT", split="train[:10000]")
+            # Full dataset
+            openo1 = datasets.load_dataset("O1-OPEN/OpenO1-SFT", split="train")
             print(f"Downloaded OpenO1: {len(openo1)} samples")
             for sample in openo1:
                 instruction = sample.get("instruction", "")
@@ -473,7 +479,8 @@ try:
 
         # 3. GlaiveAI-Reasoning
         try:
-            glaive = datasets.load_dataset("glaiveai/reasoning-v1-20m", split="train[:10000]")
+            # Keep limit for Glaive as it's huge, but increase slightly to 30k
+            glaive = datasets.load_dataset("glaiveai/reasoning-v1-20m", split="train[:30000]")
             print(f"Downloaded GlaiveAI: {len(glaive)} samples")
             for sample in glaive:
                 instruction = sample.get("instruction", "")
@@ -593,7 +600,7 @@ checkpoint_options = ocp.CheckpointManagerOptions(
 # Data Iterator
 from tunix.sft import utils as sft_utils
 
-MAX_SEQ_LEN = 1024
+MAX_SEQ_LEN = 2048 # Critical fix: increased from 1024 to avoid truncating reasoning
 
 def create_data_iterator(dataset, batch_size, tokenizer):
     '''Create batches with tokenization and masking'''
@@ -701,7 +708,7 @@ unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-sft"
 
     # --- Visual Evaluation Cell ---
     visual_eval_cell = nbf.v4.new_code_cell("""
-# --- Visual Sanity Check ---
+# --- Visual Sanity Check & Validation ---
 print("Running Post-Training Evaluation...")
 
 try:
@@ -709,7 +716,7 @@ try:
         transformer=lora_model,
         tokenizer=tokenizer,
         cache_config=sampler_lib.CacheConfig(
-            cache_size=MAX_GENERATION_STEPS + 512,
+            cache_size=MAX_SEQ_LEN + 512,
             num_layers=model_config.num_layers,
             num_kv_heads=model_config.num_kv_heads,
             head_dim=model_config.head_dim,
@@ -719,35 +726,54 @@ try:
     test_prompts = [
         "What are the ethical implications of AI in healthcare?",
         "Write a short story about a robot learning to paint.",
-        "Explain why the sky is blue to a 5-year-old."
+        "Explain why the sky is blue to a 5-year-old.",
+        "Solve this math problem step-by-step: If 2x + 5 = 15, what is x?"
     ]
     
     formatted_prompts = [TEMPLATE.format(question=p) for p in test_prompts]
     
     out_data = inference_sampler(
         input_strings=formatted_prompts,
-        max_generation_steps=300,
+        max_generation_steps=MAX_SEQ_LEN,
         temperature=0.7,
         top_k=50,
         top_p=0.95,
         echo=False
     )
     
+    # Validation Logic
     print("--- Post-Training Outputs ---")
     valid_format_count = 0
+    results_for_wandb = []
+    
     for p, o in zip(test_prompts, out_data.text):
         print(f"Prompt: {p}")
-        print(f"Output: {o[:500]}")
+        print(f"Output: {o[:500]}...")
         
-        # Simple quantitative format check
-        if "<reasoning>" in o and "</reasoning>" in o and "<answer>" in o and "</answer>" in o:
+        # Robust Regex Check
+        has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
+        has_answer = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
+        
+        is_valid = has_reasoning and has_answer
+        if is_valid:
             valid_format_count += 1
             print("✅ Format Check: Passed")
         else:
-            print("❌ Format Check: Failed")
+            print(f"❌ Format Check: Failed (Reasoning: {has_reasoning}, Answer: {has_answer})")
+            
+        results_for_wandb.append([p, o, is_valid])
         print("-" * 50)
     
     print(f"Format Validation: {valid_format_count}/{len(test_prompts)} passed.")
+    
+    # Safe WandB Logging
+    try:
+        if wandb.run is not None:
+            tbl = wandb.Table(columns=["Prompt", "Output", "IsValid"], data=results_for_wandb)
+            wandb.log({"eval_results": tbl})
+            print("Logged results to WandB Table.")
+    except Exception as w_err:
+        print(f"WandB logging skipped: {w_err}")
 
 except Exception as e:
     print(f"Evaluation failed: {e}")

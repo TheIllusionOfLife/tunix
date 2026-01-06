@@ -418,6 +418,78 @@ with mesh:
 print("Continuation Training Complete.")
 """)
 
+# --- Visual Evaluation Cell ---
+    visual_eval_cell = nbf.v4.new_code_cell("""
+# --- Visual Sanity Check & Validation ---
+print("Running Post-Training Evaluation...")
+
+try:
+    inference_sampler = sampler_lib.Sampler(
+        transformer=lora_model,
+        tokenizer=tokenizer,
+        cache_config=sampler_lib.CacheConfig(
+            cache_size=MAX_SEQ_LEN + 512,
+            num_layers=model_config.num_layers,
+            num_kv_heads=model_config.num_kv_heads,
+            head_dim=model_config.head_dim,
+        ),
+    )
+
+    test_prompts = [
+        "What are the ethical implications of AI in healthcare?",
+        "Write a short story about a robot learning to paint.",
+        "Explain why the sky is blue to a 5-year-old.",
+        "Solve this math problem step-by-step: If 2x + 5 = 15, what is x?"
+    ]
+    
+    formatted_prompts = [TEMPLATE.format(question=p) for p in test_prompts]
+    
+    out_data = inference_sampler(
+        input_strings=formatted_prompts,
+        max_generation_steps=1024,
+        temperature=0.7,
+        top_k=50,
+        top_p=0.95,
+        echo=False
+    )
+    
+    # Validation Logic
+    print("--- Post-Training Outputs ---")
+    valid_format_count = 0
+    results_for_wandb = []
+    
+    for p, o in zip(test_prompts, out_data.text):
+        print(f"Prompt: {p}")
+        print(f"Output: {o[:500]}...")
+        
+        has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
+        has_answer = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
+        
+        is_valid = has_reasoning and has_answer
+        if is_valid:
+            valid_format_count += 1
+            print("✅ Format Check: Passed")
+        else:
+            print(f"❌ Format Check: Failed")
+            
+        results_for_wandb.append([p, o, is_valid])
+        print("-" * 50)
+    
+    print(f"Format Validation: {valid_format_count}/{len(test_prompts)} passed.")
+    
+    # Safe WandB Logging
+    try:
+        if 'wandb' in locals() and wandb.run is not None:
+            tbl = wandb.Table(columns=["Prompt", "Output", "IsValid"], data=results_for_wandb)
+            wandb.log({"eval_results": tbl})
+            print("Logged results to WandB.")
+    except Exception as w_err:
+        print(f"WandB logging skipped: {w_err}")
+
+except Exception as e:
+    print(f"Evaluation failed: {e}")
+""")
+
     # --- Save Cell ---
     save_cell = nbf.v4.new_code_cell("""
 # --- Save Continuation Model ---
@@ -444,6 +516,7 @@ unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-sft-unrestricted"
         load_ckpt_cell,
         data_cell,
         train_cell,
+        visual_eval_cell,
         save_cell
     ]
 
