@@ -64,11 +64,11 @@ We employ a **Diverse Domain Strategy** using publicly available datasets with r
 | Dataset | Source | Samples | Domain | License |
 |:---|:---|:---:|:---|:---|
 | Raiden-DeepSeek-R1 | HuggingFace | 62.9K | Creative/Analytical | Apache 2.0 |
-| OpenO1-SFT | HuggingFace | 20K | General Reasoning | Apache 2.0 |
-| CoT-Collection | HuggingFace | 10K | Commonsense/Ethics | CC-BY-4.0 |
-| GlaiveAI-Reasoning | HuggingFace | 30K | Math/Code/General | Apache 2.0 |
+| OpenO1-SFT | HuggingFace | 20K (English-only) | General Reasoning | Apache 2.0 |
+| CoT-Collection | HuggingFace | 10K (pre-sampled) | Commonsense/Ethics | CC-BY-4.0 |
+| GlaiveAI-Reasoning | HuggingFace | 30K | Non-math/code | Apache 2.0 |
 
-All datasets are downloaded and processed in-notebook to demonstrate public data usage.
+All datasets are pre-processed and attached as parquet files for reproducibility.
 """)
 
     # --- Finetuning Header ---
@@ -386,29 +386,16 @@ try:
             # Identify dataset type based on filename
             fname = os.path.basename(parquet_file).lower()
             
-            # 1. CoT-Collection
+            # 1. CoT-Collection (pre-sampled 10K)
             if "cot_collection" in fname:
                 # CoT Collection: source (q), rationale (r), target (a)
-                # Strategy: Probabilistic sampling to get uniform distribution from ~1.8M samples
-                # Target: 10,000 samples. Total ~1.84M. Rate ~ 0.54%.
-                # We use 0.6% to be safe, then truncate.
-                import random 
-                cot_current_count = 0
-                cot_target = 10000
-                sampling_rate = 0.006 
-                
+                # Data is pre-sampled to 10K, just load all rows
                 for sample in ds:
-                    if cot_current_count >= cot_target:
-                        break
-                    
-                    # Random selection
-                    if random.random() < sampling_rate:
-                        q = sample.get("source", "")
-                        r = sample.get("rationale", "")
-                        a = sample.get("target", "")
-                        formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{r}</reasoning>\\n<answer>{a}</answer>"
-                        all_texts.append({"text": formatted})
-                        cot_current_count += 1
+                    q = sample.get("source", "")
+                    r = sample.get("rationale", "")
+                    a = sample.get("target", "")
+                    formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{r}</reasoning>\\n<answer>{a}</answer>"
+                    all_texts.append({"text": formatted})
 
             # 2. GlaiveAI-Reasoning
             elif "glaive" in fname:
@@ -416,19 +403,19 @@ try:
                 for sample in ds:
                     q = sample.get("prompt", sample.get("question", sample.get("instruction", "")))
                     a = sample.get("response", sample.get("answer", sample.get("output", "")))
-                    
-                    # Special handling for Glaive's <think> only format
-                    # If we just force standardized format from raw text, it might miss the answer part if it expects explicit tags
-                    # But standardize_to_gemma_format logic for raw text is:
-                    # extract reasoning from tags (think/Thought/reasoning)
-                    # output rest as answer
-                    # Let's verify standardizer handles this.
-                    # It does: `remaining_text` logic handles extraction.
-                    
                     formatted = standardize_to_gemma_format(a, question=q)
                     all_texts.append({"text": formatted})
 
-            # 3. Raiden / OpenO1 (Standard formatted or text column)
+            # 3. OpenO1-SFT (pre-filtered English-only, instruction/output columns)
+            elif "openo1" in fname:
+                for sample in ds:
+                    q = sample.get("instruction", "")
+                    a = sample.get("output", "")
+                    if q and a:
+                        formatted = standardize_to_gemma_format(a, question=q)
+                        all_texts.append({"text": formatted})
+
+            # 4. Raiden (text column with pre-formatted conversation)
             else: 
                 for sample in ds:
                      # Check if pre-formatted 'text' field exists
