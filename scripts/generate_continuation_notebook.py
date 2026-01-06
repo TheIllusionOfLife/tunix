@@ -276,6 +276,20 @@ def standardize_to_gemma_format(text, question=None):
             answer = text.strip()
         text = f"<reasoning>{reasoning}</reasoning>\\n<answer>{answer}</answer>"
     
+    # Case 3: Has <answer> but no <reasoning> - wrap content before <answer> as reasoning
+    elif "<answer>" in text and "<reasoning>" not in text:
+        parts = text.split("<answer>")
+        if len(parts) > 1:
+            pre_answer = parts[0].strip()
+            answer_content = "<answer>" + parts[1]
+            if pre_answer:
+                text = f"<reasoning>{pre_answer}</reasoning>\\n{answer_content}"
+            else:
+                # No content before answer - use answer content as reasoning too
+                answer_match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL)
+                if answer_match:
+                    text = f"<reasoning>{answer_match.group(1).strip()}</reasoning>\\n{answer_content}"
+    
     # Build full conversation format
     if question:
         formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{question}<end_of_turn>\\n<start_of_turn>model\\n{text}"

@@ -193,8 +193,8 @@ SFT_OUTPUT_DIR = "/kaggle/working/sft_checkpoint"
 
 # Tuning Hyperparams
 SFT_STEPS = 4000  # Increased for full epoch coverage (>128k samples)
-TRAIN_BATCH_SIZE = 8 # Global batch size (1 per device on 8 chips)
-GRADIENT_ACCUMULATION = 4
+TRAIN_BATCH_SIZE = 8 # Per-step batch size across all 8 TPU chips (1 sample/chip)
+GRADIENT_ACCUMULATION = 4  # Effective batch = 8 * 4 = 32
 EFFECTIVE_BATCH = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION  # 32
 """)
 
@@ -292,8 +292,25 @@ def standardize_to_gemma_format(text, question=None):
         text = re.sub(r"<thought>", "<reasoning>", text, flags=re.IGNORECASE)
         text = re.sub(r"</thought>", "</reasoning>", text, flags=re.IGNORECASE)
         
-        # Enforce <answer> tags if missing (sometimes models output just the answer after start_of_turn)
-        if "<answer>" not in text and "<start_of_turn>model" in text:
+        # Case 1: Has <answer> but no <reasoning> - wrap content before <answer> as reasoning
+        if "<answer>" in text and "<reasoning>" not in text and "<start_of_turn>model" in text:
+            match = re.search(r"<start_of_turn>model\\n(.*)(<answer>.*</answer>)", text, re.DOTALL)
+            if match:
+                pre_answer = match.group(1).strip()
+                answer_tag = match.group(2)
+                if pre_answer:
+                    new_content = f"<reasoning>{pre_answer}</reasoning>\\n{answer_tag}"
+                    text = re.sub(r"<start_of_turn>model\\n.*(<answer>.*</answer>)", 
+                                  f"<start_of_turn>model\\n{new_content}", text, flags=re.DOTALL)
+                else:
+                    # No content before answer - extract answer content as reasoning too
+                    answer_content = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL)
+                    if answer_content:
+                        text = re.sub(r"<start_of_turn>model\\n", 
+                                      f"<start_of_turn>model\\n<reasoning>{answer_content.group(1).strip()}</reasoning>\\n", text)
+        
+        # Case 2: Enforce <answer> tags if missing (sometimes models output just the answer after start_of_turn)
+        elif "<answer>" not in text and "<start_of_turn>model" in text:
             # Heuristic: Wrap the last part of the model turn in answer tags if not present
             match = re.search(r"<start_of_turn>model\\n(.*)$", text, re.DOTALL)
             if match:
@@ -443,8 +460,8 @@ try:
         print(f"Dataset path {DATASET_PATH} not found. Downloading from HuggingFace...")
         
         # Fallback: Download from HuggingFace
-        # 1. Raiden-DeepSeek-R1 (main dataset) - Full dataset
-        raiden = datasets.load_dataset("sequelbox/Raiden-DeepSeek-R1", split="train") 
+        # 1. Raiden-DeepSeek-R1 (main dataset) - Safety limit to prevent timeout
+        raiden = datasets.load_dataset("sequelbox/Raiden-DeepSeek-R1", split="train[:50000]") 
         print(f"Downloaded Raiden: {len(raiden)} samples")
         for sample in raiden:
             prompt = sample.get("prompt", "")
@@ -458,10 +475,10 @@ try:
                 formatted = standardize_to_gemma_format(response, question=prompt)
                 all_texts.append({"text": formatted})
         
-        # 2. OpenO1-SFT
+        # 2. OpenO1-SFT - Safety limit
         try:
-            # Full dataset
-            openo1 = datasets.load_dataset("O1-OPEN/OpenO1-SFT", split="train")
+            # Limited to 50K to prevent timeout
+            openo1 = datasets.load_dataset("O1-OPEN/OpenO1-SFT", split="train[:50000]")
             print(f"Downloaded OpenO1: {len(openo1)} samples")
             for sample in openo1:
                 instruction = sample.get("instruction", "")

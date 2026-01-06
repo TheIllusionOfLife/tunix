@@ -6,36 +6,42 @@ import datasets
 # Mock Constants
 SYSTEM_PROMPT = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
 
+# Use local pre-sampled parquet files
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+
 def standardize_to_gemma_format(text, question=None):
     '''Convert various formats to Gemma chat template with <reasoning>/<answer> tags'''
     
     # Handle already formatted text
     if "<start_of_turn>" in text:
-        # Just ensure we have our tags (case insensitive replacement)
         text = re.sub(r"<think>", "<reasoning>", text, flags=re.IGNORECASE)
         text = re.sub(r"</think>", "</reasoning>", text, flags=re.IGNORECASE)
         text = re.sub(r"<thought>", "<reasoning>", text, flags=re.IGNORECASE)
         text = re.sub(r"</thought>", "</reasoning>", text, flags=re.IGNORECASE)
         
-        # Enforce <answer> tags if missing
-        if "<answer>" not in text and "<start_of_turn>model" in text:
+        # Case 1: Has <answer> but no <reasoning>
+        if "<answer>" in text and "<reasoning>" not in text and "<start_of_turn>model" in text:
+            match = re.search(r"<start_of_turn>model\n(.*)(<answer>.*</answer>)", text, re.DOTALL)
+            if match:
+                pre_answer = match.group(1).strip()
+                answer_tag = match.group(2)
+                if pre_answer:
+                    new_content = f"<reasoning>{pre_answer}</reasoning>\n{answer_tag}"
+                    text = re.sub(r"<start_of_turn>model\n.*(<answer>.*</answer>)", 
+                                  f"<start_of_turn>model\n{new_content}", text, flags=re.DOTALL)
+        
+        # Case 2: Enforce <answer> tags if missing
+        elif "<answer>" not in text and "<start_of_turn>model" in text:
             match = re.search(r"<start_of_turn>model\n(.*)$", text, re.DOTALL)
             if match:
-                 content = match.group(1).strip()
-                 if "<reasoning>" not in content:
-                     text = text.replace(content, f"<answer>{content}</answer>")
-                 else:
-                     parts = content.split("</reasoning>")
-                     if len(parts) > 1 and parts[1].strip():
-                         answer_part = parts[1].strip()
-                         text = text.replace(content, f"{parts[0]}</reasoning>\n<answer>{answer_part}</answer>")
-                     else:
-                         reasoning_match = re.search(r"<reasoning>(.*?)</reasoning>", content, re.DOTALL)
-                         if reasoning_match:
-                             reasoning_text = reasoning_match.group(1).strip()
-                             sentences = reasoning_text.split(".")
-                             answer_fallback = sentences[-1].strip() if sentences else reasoning_text[:200]
-                             text = text + f"\n<answer>{answer_fallback}</answer>"
+                content = match.group(1).strip()
+                if "<reasoning>" not in content:
+                    text = text.replace(content, f"<answer>{content}</answer>")
+                else:
+                    parts = content.split("</reasoning>")
+                    if len(parts) > 1 and parts[1].strip():
+                        answer_part = parts[1].strip()
+                        text = text.replace(content, f"{parts[0]}</reasoning>\n<answer>{answer_part}</answer>")
         return text
     
     # For raw question/response pairs
@@ -88,42 +94,77 @@ def standardize_to_gemma_format(text, question=None):
     
     return text
 
-print("Smoke Test: Starting Data Load Check...")
+print("Smoke Test: Using LOCAL pre-sampled parquet files...")
 all_texts = []
 
 try:
-    print("1. Testing Raiden (Small Subset)...")
-    # Using small split to test logic without downloading gigabytes
-    raiden = datasets.load_dataset("sequelbox/Raiden-DeepSeek-R1", split="train[:50]") 
-    for sample in raiden:
-        prompt = sample.get("prompt", "")
-        response = sample.get("response", sample.get("completion", ""))
-        
-        # Test Filter Logic
-        if len(response) > 8000 or len(response) < 50:
-            print(f"Filtered sample of length {len(response)}")
-            continue
-            
-        if prompt and response:
-            formatted = standardize_to_gemma_format(response, question=prompt)
-            all_texts.append({"text": formatted})
-    print(f"Raiden Pass: Loaded {len(all_texts)} valid samples.")
+    # 1. Raiden
+    print("\n1. Testing Raiden (Local Parquet)...")
+    raiden_path = os.path.join(DATA_DIR, "raiden_deepseek_r1.parquet")
+    if os.path.exists(raiden_path):
+        ds = datasets.load_dataset("parquet", data_files=raiden_path, split="train[:50]")
+        for sample in ds:
+            prompt = sample.get("prompt", "")
+            response = sample.get("response", sample.get("completion", ""))
+            if len(response) > 8000 or len(response) < 50:
+                continue
+            if prompt and response:
+                formatted = standardize_to_gemma_format(response, question=prompt)
+                all_texts.append({"text": formatted})
+        print(f"Raiden Pass: Loaded {len(all_texts)} samples.")
+    else:
+        print(f"Raiden SKIP: {raiden_path} not found")
 
-    print("\n2. Testing OpenO1 (Small Subset)...")
-    openo1 = datasets.load_dataset("O1-OPEN/OpenO1-SFT", split="train[:50]")
-    before_count = len(all_texts)
-    for sample in openo1:
-        instruction = sample.get("instruction", "")
-        output = sample.get("output", "")
-        # Chinese filter check (mocking inputs if needed, but using real data here)
-        if any(u'\u4e00' <= c <= u'\u9fff' for c in instruction + output):
-             continue
-        if instruction and output:
-            formatted = standardize_to_gemma_format(output, question=instruction)
-            all_texts.append({"text": formatted})
-    print(f"OpenO1 Pass: Added {len(all_texts)-before_count} samples.")
+    # 2. OpenO1
+    print("\n2. Testing OpenO1 (Local Parquet)...")
+    openo1_path = os.path.join(DATA_DIR, "openo1_sft_english_20k.parquet")
+    if os.path.exists(openo1_path):
+        before_count = len(all_texts)
+        ds = datasets.load_dataset("parquet", data_files=openo1_path, split="train[:50]")
+        for sample in ds:
+            instruction = sample.get("instruction", "")
+            output = sample.get("output", "")
+            if instruction and output:
+                formatted = standardize_to_gemma_format(output, question=instruction)
+                all_texts.append({"text": formatted})
+        print(f"OpenO1 Pass: Added {len(all_texts)-before_count} samples.")
+    else:
+        print(f"OpenO1 SKIP: {openo1_path} not found")
 
-    print("\n✅ Smoke Test Passed. Logic does not crash.")
+    # 3. CoT-Collection
+    print("\n3. Testing CoT-Collection (Local Parquet)...")
+    cot_path = os.path.join(DATA_DIR, "cot_collection_10k.parquet")
+    if os.path.exists(cot_path):
+        before_count = len(all_texts)
+        ds = datasets.load_dataset("parquet", data_files=cot_path, split="train[:50]")
+        for sample in ds:
+            q = sample.get("source", "")
+            r = sample.get("rationale", "")
+            a = sample.get("target", "")
+            if q and r and a:
+                formatted = f"<start_of_turn>user\n{SYSTEM_PROMPT}\n\n{q}<end_of_turn>\n<start_of_turn>model\n<reasoning>{r}</reasoning>\n<answer>{a}</answer>"
+                all_texts.append({"text": formatted})
+        print(f"CoT-Collection Pass: Added {len(all_texts)-before_count} samples.")
+    else:
+        print(f"CoT-Collection SKIP: {cot_path} not found")
+
+    # 4. GlaiveAI
+    print("\n4. Testing GlaiveAI (Local Parquet)...")
+    glaive_path = os.path.join(DATA_DIR, "glaiveai_30k.parquet")
+    if os.path.exists(glaive_path):
+        before_count = len(all_texts)
+        ds = datasets.load_dataset("parquet", data_files=glaive_path, split="train[:50]")
+        for sample in ds:
+            instruction = sample.get("instruction", sample.get("prompt", ""))
+            output = sample.get("output", sample.get("response", ""))
+            if instruction and output:
+                formatted = standardize_to_gemma_format(output, question=instruction)
+                all_texts.append({"text": formatted})
+        print(f"GlaiveAI Pass: Added {len(all_texts)-before_count} samples.")
+    else:
+        print(f"GlaiveAI SKIP: {glaive_path} not found")
+
+    print(f"\n✅ Smoke Test Passed. Total: {len(all_texts)} samples processed.")
 
 except Exception as e:
     print(f"\n❌ Smoke Test Failed: {e}")
