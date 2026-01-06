@@ -24,7 +24,9 @@ def smoke_test_notebook(notebook_path):
             clean_lines = []
             for line in lines:
                 if line.strip().startswith('!') or line.strip().startswith('%'):
-                    clean_lines.append(f"# {line} # SKIPPED MAGIC")
+                    # Preserve indentation but replace with pass
+                    leading_whitespace = line[:len(line) - len(line.lstrip())]
+                    clean_lines.append(f"{leading_whitespace}pass # SKIPPED MAGIC: {line.strip()}")
                 else:
                     clean_lines.append(line)
             
