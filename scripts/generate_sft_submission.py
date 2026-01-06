@@ -166,8 +166,6 @@ from pathlib import Path
 import qwix
 import tensorflow_datasets as tfds
 import datasets
-import tensorflow_datasets as tfds
-import datasets
 from tqdm.auto import tqdm
 import numpy as np
 
@@ -304,9 +302,20 @@ def standardize_to_gemma_format(text, question=None):
                  if "<reasoning>" not in content:
                      text = text.replace(content, f"<answer>{content}</answer>")
                  else:
-                     # Reasoning exists, so wrap whatever is after reasoning? 
-                     # Risk of breaking format. Best safe fallback is just appending expected structure if completely malformed
-                     pass 
+                     # Reasoning exists but no answer - extract answer from after </reasoning>
+                     parts = content.split("</reasoning>")
+                     if len(parts) > 1 and parts[1].strip():
+                         answer_part = parts[1].strip()
+                         text = text.replace(content, f"{parts[0]}</reasoning>\\n<answer>{answer_part}</answer>")
+                     else:
+                         # No content after reasoning, use reasoning summary as answer
+                         reasoning_match = re.search(r"<reasoning>(.*?)</reasoning>", content, re.DOTALL)
+                         if reasoning_match:
+                             # Use last sentence of reasoning as answer
+                             reasoning_text = reasoning_match.group(1).strip()
+                             sentences = reasoning_text.split(".")
+                             answer_fallback = sentences[-1].strip() if sentences else reasoning_text[:200]
+                             text = text + f"\\n<answer>{answer_fallback}</answer>"
         return text
     
     # For raw question/response pairs

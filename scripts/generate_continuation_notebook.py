@@ -245,7 +245,7 @@ def standardize_to_gemma_format(text, question=None):
     text = re.sub(r"<think>", "<reasoning>", text, flags=re.IGNORECASE)
     text = re.sub(r"</think>", "</reasoning>", text, flags=re.IGNORECASE)
     
-    # If no <answer> tag, wrap the part after </reasoning>
+    # Case 1: Has <reasoning> but no <answer> - extract answer from after </reasoning>
     if "<reasoning>" in text and "<answer>" not in text:
         parts = text.split("</reasoning>")
         if len(parts) > 1:
@@ -253,6 +253,28 @@ def standardize_to_gemma_format(text, question=None):
             answer_part = parts[1].strip()
             if answer_part:
                 text = f"{reasoning_part}\\n<answer>{answer_part}</answer>"
+            else:
+                # No content after reasoning - use last sentence as answer fallback
+                reasoning_match = re.search(r"<reasoning>(.*?)</reasoning>", text, re.DOTALL)
+                if reasoning_match:
+                    reasoning_text = reasoning_match.group(1).strip()
+                    sentences = reasoning_text.split(".")
+                    answer_fallback = sentences[-1].strip() if sentences and sentences[-1].strip() else reasoning_text[:200]
+                    text = f"{text}\\n<answer>{answer_fallback}</answer>"
+    
+    # Case 2: No <reasoning> AND no <answer> - wrap entire text with both tags
+    elif "<reasoning>" not in text and "<answer>" not in text:
+        # Treat text as combined reasoning+answer
+        # Use all but last paragraph as reasoning, last paragraph as answer
+        paragraphs = text.strip().split("\\n\\n")
+        if len(paragraphs) > 1:
+            reasoning = "\\n\\n".join(paragraphs[:-1])
+            answer = paragraphs[-1]
+        else:
+            # Single paragraph - use as both
+            reasoning = text.strip()
+            answer = text.strip()
+        text = f"<reasoning>{reasoning}</reasoning>\\n<answer>{answer}</answer>"
     
     # Build full conversation format
     if question:
