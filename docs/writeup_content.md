@@ -6,58 +6,65 @@
 `Tunix Zero-Cost: Teaching Reasoning Through Demonstration`
 
 **Subtitle**: 
-`SFT on high-quality reasoning traces across diverse domains using only public data.`
+`SFT on high-quality GlaiveAI reasoning traces using only public data.`
 
 **Card Image**: 
-Diagram showing: `Gemma 2B-IT` → `[SFT on Diverse Reasoning]` → `Thinking Model`
+Diagram showing: `Gemma 2B-IT` → `[SFT on GlaiveAI]` → `Thinking Model`
 
 ---
 
 ## 2. Project Description
 
-### Supervised Fine-Tuning on Diverse Domains
+### Supervised Fine-Tuning on GlaiveAI
 
-We prioritized non-verifiable domains (creative, analytical, philosophical) over math/code because:
-1. Competition evaluation emphasizes diverse reasoning quality
-2. Smaller models benefit more from demonstration than exploration
-3. SFT is more efficient, allowing 10x more training samples
+We chose **GlaiveAI-only** training after evaluating multiple datasets:
 
-#### Datasets Used (Pre-sampled Parquet Files)
+| Dataset | Decision | Reason |
+|---------|----------|--------|
+| GlaiveAI | ✅ **Use** | 2025 model, non-math/code focus |
+| CoT-Collection | ❌ Drop | 2023 models, outdated |
+| Raiden-DeepSeek-R1 | ❌ Drop | Unfiltered, infinite loops |
+| OpenO1-SFT | ❌ Drop | Math/code focus (deprioritized) |
 
-| Dataset | Samples | Sampling Method |
-|:---|:---:|:---|
-| Raiden-DeepSeek-R1 | 62.9K | Full dataset |
-| OpenO1-SFT | 20K | English-only, random sample |
-| CoT-Collection | 10K | Reservoir sampling (seed=42) |
-| GlaiveAI-Reasoning | 30K | First N |
-| **Total** | **~123K** | |
+### Why GlaiveAI?
 
-All datasets feature explicit reasoning traces (converted to `<reasoning>`/`<answer>` tags) distilled from frontier models.
+1. **Competition-aligned**: FAQ says math/code have "much lower weights"
+2. **2025 Quality**: DeepSeek-R1-Distill-70B reasoning
+3. **Focus**: Social science, creative writing, analytical domains
+4. **Scale**: 22M+ samples available
+
+### Training Configuration
+
+| Setting | Value |
+|---------|-------|
+| Samples | 180K |
+| Epochs | 4 |
+| Steps | ~22,500 |
+| Runtime | ~7 hours |
 
 ### Implementation Details
 
 - **Library**: `google-tunix`, `flax`, `jax`
 - **Hardware**: Kaggle TPU VM v5e-8
-- **Method**: LoRA (Low-Rank Adaptation) for efficient fine-tuning
-- **Data**: Pre-processed parquet files for reproducibility
-- **Runtime**: Configurable (8K steps ~2.5 hours, 28K steps ~8.5 hours)
+- **Method**: LoRA (Low-Rank Adaptation)
+- **Format**: `<reasoning>` / `<answer>` tags
 
 ### Key Insight
 
-> "For 2B parameter models, learning from demonstrations is more effective than reinforcement learning. SFT provides dense supervision at every token, while RL provides sparse rewards only at sequence end."
+> "Quality over quantity: One 2025 dataset aligned with competition goals outperforms four mixed-quality datasets."
 
 ### Unrestricted Mode
 
-For bonus points, we continue training using **100K fresh samples** from glaiveai/reasoning-v1-20m (samples 30,001-130,000, not overlapping with session 1).
+For bonus points, we continue training using **100K fresh samples** from GlaiveAI (`train[180000:280000]`, non-overlapping with session 1).
 
 ---
 
 ## 3. Learnings
 
-- **Domain Matters More Than Method**: Training on diverse, high-weight domains (creative, analytical) outweighs technique sophistication
-- **SFT Efficiency**: Processed 120K samples vs ~1,500 GRPO steps in same time
-- **Pre-sampling Saves Runtime**: Pre-processed parquet files eliminate streaming/sampling overhead on Kaggle
-- **Reasoning Traces Are Key**: Explicit `<think>` traces teach structured problem-solving
+- **Dataset Quality Matters**: 2023 datasets can't compete with 2025 reasoning quality
+- **Alignment > Diversity**: Better to focus on competition-aligned domains
+- **Single Source Benefits**: No format standardization issues
+- **GlaiveAI is Underrated**: Massive, high-quality, perfect for this competition
 
 ---
 

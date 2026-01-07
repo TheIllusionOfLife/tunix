@@ -4,7 +4,7 @@ Sample fresh GlaiveAI data for Continuation Training (Unrestricted Mode)
 
 This script:
 1. Downloads GlaiveAI reasoning-v1-20m from HuggingFace
-2. SKIPS the first 30K samples (used in single session)
+2. SKIPS the first 180K samples (used in single session)
 3. Samples 100K fresh samples from the remaining data
 4. Saves as parquet for a separate Kaggle dataset
 
@@ -20,14 +20,15 @@ import random
 import os
 
 # Configuration
-SKIP_FIRST = 30000  # Already used in single session
+SKIP_FIRST = 180000  # Already used in single session (updated from 30K)
 SAMPLE_SIZE = 100000
 SEED = 42
 OUTPUT_PATH = "data/glaiveai_continuation_100k.parquet"
 
+
 def main():
     print("=" * 60)
-    print("GlaiveAI Continuation Sampler")
+    print("GlaiveAI Continuation Sampler (Unrestricted Mode)")
     print("=" * 60)
     
     # Set seed for reproducibility
@@ -43,7 +44,7 @@ def main():
         streaming=True
     )
     
-    # Skip first 30K and collect next samples
+    # Skip first 180K and collect next samples
     print(f"\nSkipping first {SKIP_FIRST:,} samples (used in single session)...")
     print(f"Then sampling {SAMPLE_SIZE:,} fresh samples...")
     
@@ -54,10 +55,10 @@ def main():
     for item in ds:
         count += 1
         
-        # Skip first 30K
+        # Skip first 180K
         if skipped < SKIP_FIRST:
             skipped += 1
-            if skipped % 10000 == 0:
+            if skipped % 30000 == 0:
                 print(f"  Skipped {skipped:,} samples...")
             continue
         
@@ -103,9 +104,10 @@ def main():
     
     print("\n" + "=" * 60)
     print("Done!")
-    print("Upload data/glaiveai_continuation_100k.parquet as a NEW Kaggle dataset.")
+    print(f"Upload {OUTPUT_PATH} as a NEW Kaggle dataset.")
     print("Suggested dataset name: tunix-sft-continuation-data")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     main()

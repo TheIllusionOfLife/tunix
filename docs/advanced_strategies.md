@@ -10,46 +10,25 @@ Instead of reinforcement learning on verifiable tasks, we teach reasoning throug
 
 ## Dataset Selection Strategy
 
-### Primary Criteria
+### Selection Criteria
 1. **Domain**: Non-math, non-code (high competition weight)
-2. **Format**: Explicit reasoning traces (`<think>`, `<Thought>`, etc.)
-3. **Quality**: Distilled from frontier models (R1, O1, etc.)
-4. **License**: Apache 2.0, MIT, or CC-BY
-5. **Language**: English-only (Chinese filtered out)
+2. **Quality**: 2025 models (DeepSeek-R1-Distill-70B or equivalent)
+3. **Format**: Explicit reasoning traces (`<think>` tags)
+4. **License**: Apache 2.0
+5. **Alignment**: Matches competition evaluation criteria
 
-### Dataset Mix (~123K samples)
+### Dataset Decision
 
-| Dataset | Samples | Method | Strength |
-|:---|:---:|:---|:---|
-| Raiden-DeepSeek-R1 | 62.9K | Full | Creative/analytical |
-| OpenO1-SFT | 20K | English + Random | General reasoning |
-| CoT-Collection | 10K | Reservoir sampling | Commonsense/ethics |
-| GlaiveAI | 30K | First N | Non-math/code |
-
----
-
-## Pre-sampling Scripts
-
-| Script | Output | Size |
-|:---|:---|:---|
-| `scripts/sample_openo1_english.py` | `openo1_sft_english_20k.parquet` | 44.8 MB |
-| `scripts/sample_cot_collection.py` | `cot_collection_10k.parquet` | 6.6 MB |
-| `scripts/sample_glaiveai_continuation.py` | `glaiveai_continuation_100k.parquet` | 365.2 MB |
-
-All scripts use `seed=42` for reproducibility.
+| Dataset | Created | Decision | Reason |
+|---------|---------|----------|--------|
+| **GlaiveAI** | 2025 | ✅ **Use** | Non-math/code focus, 2025 quality |
+| CoT-Collection | 2023 | ❌ Drop | Outdated model quality |
+| Raiden-DeepSeek-R1 | 2025 | ❌ Drop | Unfiltered, infinite loops |
+| OpenO1-SFT | 2025 | ❌ Drop | Math/code focus (deprioritized) |
 
 ---
 
 ## Training Configuration
-
-### Full-Weight SFT vs LoRA
-
-| Approach | Pros | Cons |
-|:---|:---|:---|
-| **Full SFT** | Maximum quality | Higher memory, slower |
-| **LoRA** | Efficient, stable | May underfit |
-
-**Current**: LoRA for speed and stability.
 
 ### Hyperparameters
 
@@ -57,10 +36,11 @@ All scripts use `seed=42` for reproducibility.
 SFT_CONFIG = {
     "learning_rate": 2e-5,       # Session 1
     "continuation_lr": 5e-6,     # Session 2 (lower)
-    "batch_size": 2,
-    "gradient_accumulation": 16,  # Effective batch = 32
-    "max_seq_length": 1024,
-    "warmup_steps": 100,
+    "batch_size": 8,
+    "gradient_accumulation": 4,   # Effective batch = 32
+    "max_seq_length": 2048,
+    "warmup_steps": 200,
+    "steps": 22500,               # 180K × 4 epochs
 }
 ```
 
@@ -68,14 +48,12 @@ SFT_CONFIG = {
 
 ## Format Standardization
 
-All datasets use different tag formats:
+GlaiveAI uses `<think>` tags, standardized to competition format:
 
-| Dataset | Original Format | Standardized To |
-|:---|:---|:---|
-| Raiden | DeepSeek-R1 style | `<reasoning>...<answer>` |
-| OpenO1 | `<Thought>...<Output>` | `<reasoning>...<answer>` |
-| CoT-Collection | `rationale` column | `<reasoning>...<answer>` |
-| GlaiveAI | `<think>` only | `<reasoning>...<answer>` |
+| Original | Standardized |
+|----------|--------------|
+| `<think>` | `<reasoning>` |
+| (content after think) | `<answer>` |
 
 **Target format**:
 ```
@@ -92,28 +70,18 @@ All datasets use different tag formats:
 
 ## Unrestricted Mode Strategy
 
-### Session Allocation
+| Session | GlaiveAI Slice | Samples |
+|---------|----------------|---------|
+| 1 (Single) | `train[:180000]` | 180K |
+| 2 (Unrestricted) | `train[180000:280000]` | 100K |
 
-| Session | Focus | Data Size | Source |
-|:---|:---|:---:|:---|
-| 1 | Core diverse reasoning | ~123K | tunix-sft-data |
-| 2 | Extended coverage | 100K | tunix-sft-continuation-data |
-| 3 | Polish (optional) | Variable | More GlaiveAI or GRPO |
-
-### Fresh Data Principle
-
-Continuation training uses **non-overlapping** samples:
-- Session 1: GlaiveAI samples 1-30,000
-- Session 2: GlaiveAI samples 30,001-130,000
-
-This prevents overfitting and maximizes diversity.
+Non-overlapping slices prevent overfitting.
 
 ---
 
-## Fallback Strategies
+## Why GlaiveAI-Only
 
-If SFT underperforms:
-1. **Add GRPO polish**: Light RL after SFT
-2. **Increase epochs**: More passes over data
-3. **Filter for quality**: Remove low-quality samples
-4. **Revert to GRPO**: Documents preserved in `archive/`
+1. **2025 Quality**: DeepSeek-R1-Distill-70B is state-of-the-art
+2. **Competition-Aligned**: Non-math/code focus matches FAQ guidance
+3. **Consistency**: Single source = no format standardization issues
+4. **Scale**: 22M+ samples available for extension

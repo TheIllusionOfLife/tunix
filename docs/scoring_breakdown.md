@@ -1,4 +1,4 @@
-# Scoring Breakdown (SFT Strategy)
+# Scoring Breakdown (GlaiveAI-Only Strategy)
 
 ## Competition Scoring Overview
 
@@ -6,8 +6,8 @@
 |:---|:---:|:---|
 | **Notebook Quality** | ~15 | Clean code, clear documentation |
 | **Video Quality** | ~15 | Clear explanation of SFT strategy |
-| **Model Quality** | 45 | SFT on diverse reasoning traces |
-| **Unrestricted Mode** | +15 | Extended SFT with fresh 100K samples |
+| **Model Quality** | 45 | SFT on GlaiveAI (2025 quality) |
+| **Unrestricted Mode** | +15 | Extended SFT with 100K fresh samples |
 | **Total** | **90** | |
 
 ---
@@ -20,46 +20,35 @@ From FAQ #6:
 
 ### Domain Weight Predictions
 
-| Domain | Weight | Our Coverage |
+| Domain | Weight | GlaiveAI Coverage |
 |:---|:---:|:---|
-| Creative/Analytical | High | ✅ 62.9K Raiden samples |
-| Philosophical/Ethics | High | ✅ 10K CoT (pre-sampled) |
-| Commonsense | Medium | ✅ CoT-Collection |
-| General Reasoning | Medium | ✅ 20K OpenO1 (English-only) |
-| Non-math/code | Medium | ✅ 30K GlaiveAI |
+| Creative Writing | High | ✅ Strong |
+| Analytical Reasoning | High | ✅ Strong |
+| Social Science | High | ✅ Strong |
+| Philosophical/Ethics | Medium | ✅ Good |
+| General Reasoning | Medium | ✅ Good |
 | Math | Low | ⚠️ Not prioritized |
 | Coding | Low | ⚠️ Not prioritized |
 
-### Evaluation Criteria (Predicted)
-
-1. **Accuracy**: Does the answer address the question?
-2. **Partial Accuracy**: Is reasoning partially correct?
-3. **Format Accuracy**: Are `<reasoning>` and `<answer>` tags present?
-4. **Reasoning Quality**: Is the thinking process coherent?
-5. **Domain Coverage**: Can model handle diverse topics?
-
 ---
 
-## Why SFT Over GRPO
+## Why GlaiveAI-Only
 
-| Factor | GRPO | SFT |
+| Factor | GlaiveAI | Others |
 |:---|:---|:---|
-| **Samples/9hr** | ~1,500 | ~123,000 |
-| **Domain Coverage** | Math/Code only | Diverse |
-| **Competition Alignment** | Low-weight domains | High-weight domains |
-| **2B Model Suitability** | Questionable | Better |
+| **Model Year** | 2025 | Mixed |
+| **Quality** | DeepSeek-R1-Distill-70B | Variable |
+| **Focus** | Non-math/code (aligned) | Math/code heavy |
+| **Format** | Consistent | Inconsistent |
 
 ---
 
 ## Our Dataset Strategy
 
-| Dataset | Full Size | Included | Method |
-|:---|---:|---:|:---|
-| Raiden-DeepSeek-R1 | 62,925 | 62,925 | Full |
-| OpenO1-SFT | 77,685 | 20,000 | English filter + Random |
-| CoT-Collection | 1,837,928 | 10,000 | Reservoir sampling |
-| GlaiveAI | 22,200,000+ | 30,000 | First N |
-| **Total** | - | **~123K** | |
+| Dataset | Samples | Notes |
+|:---|:---:|:---|
+| GlaiveAI | 180,000 | Primary dataset |
+| **Total** | **180K** | 4 epochs = ~22,500 steps |
 
 ---
 
@@ -67,8 +56,7 @@ From FAQ #6:
 
 | Risk | Mitigation |
 |:---|:---|
-| Model overfits | Use diverse datasets, multiple sources |
-| Format compliance drops | Data has explicit reasoning tags |
-| Worse at math | Acceptable - low competition weight |
-| Dataset quality varies | Multiple datasets for redundancy |
-| Chinese leakage | Pre-filtered English-only OpenO1 |
+| Single source dependency | GlaiveAI is massive (22M+), high quality |
+| Format compliance | Consistent `<think>` tag = easier standardization |
+| Math performance drop | Acceptable - FAQ deprioritizes math/code |
+| Overfitting | 4 epochs is moderate; 180K samples is large |

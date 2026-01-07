@@ -1,4 +1,4 @@
-# Video Script (SFT Strategy) - < 3 Minutes
+# Video Script (GlaiveAI-Only Strategy) - < 3 Minutes
 
 **Pro Tip**: Record screen first, add voiceover second.
 
@@ -19,16 +19,16 @@ Small models like Gemma 2B have a problem: they answer too fast without thinking
 
 ## 0:30 - 1:15 | The Strategy
 
-**Visual**: Show diagram: `Gemma 2B` → `SFT on 100K reasoning traces` → `Thinking Model`
+**Visual**: Show diagram: `Gemma 2B` → `SFT on 180K GlaiveAI` → `Thinking Model`
 
 **Audio**:
-"Our strategy: Supervised Fine-Tuning on diverse reasoning traces.
+"Our strategy: Supervised Fine-Tuning on a single, high-quality dataset called GlaiveAI.
 
-We found that the competition values creative and analytical thinking more than math. So instead of training on equations, we trained on 100,000 examples of step-by-step reasoning across philosophy, ethics, commonsense, and creative tasks.
+Why just one dataset? Quality over quantity. We found that 2023 datasets can't compare to 2025 reasoning quality.
 
-We used datasets like Raiden-DeepSeek-R1 and glaiveai's reasoning corpus - all public, all properly licensed.
+GlaiveAI was created this year using DeepSeek-R1-Distill-70B - state of the art. And it focuses on exactly what the competition values: creative writing, social science, analytical reasoning - NOT math and code.
 
-The key: every example shows the full thinking process with explicit `<reasoning>` tags."
+Every example shows the full thinking process with explicit `<reasoning>` tags."
 
 ---
 
@@ -41,9 +41,9 @@ The key: every example shows the full thinking process with explicit `<reasoning
 
 We use the PeftTrainer for supervised learning. Each sample follows the format: question, reasoning trace, then answer.
 
-The model learns to generate the thinking process first, then the conclusion.
+180,000 samples. 4 epochs. 7 hours on a single TPU.
 
-In 8 hours on a single TPU, we processed over 100,000 reasoning examples - that's 10 times more than reinforcement learning would allow."
+The model learns to generate the thinking process first, then the conclusion."
 
 ---
 
@@ -56,9 +56,9 @@ In 8 hours on a single TPU, we processed over 100,000 reasoning examples - that'
 
 I'll ask a philosophical question: 'What are the ethical implications of AI art?'
 
-Watch - it doesn't just give an answer. It opens a reasoning tag, considers multiple perspectives, weighs the tradeoffs, and only then provides a thoughtful response.
+Watch - it opens a reasoning tag, considers multiple perspectives, weighs the tradeoffs, and only then provides a thoughtful response.
 
-This is the power of learning by example."
+This is the power of learning from high-quality examples."
 
 ---
 
@@ -67,16 +67,16 @@ This is the power of learning by example."
 **Visual**: Face camera or "Thank You" slide
 
 **Audio**:
-"For unrestricted mode, we scaled up to millions of samples using the glaiveai dataset.
+"For unrestricted mode, we continued training on another 100K fresh samples from GlaiveAI.
 
-The lesson? Sometimes teaching is more effective than training. Check out the full code in the writeup. Thanks for watching!"
+The lesson? One great dataset beats four mediocre ones. Check out the full code in the writeup. Thanks for watching!"
 
 ---
 
 ## Recording Checklist
 
 - [ ] Title slide: "Teaching Reasoning Through Demonstration"
-- [ ] Diagram: SFT pipeline
+- [ ] Diagram: SFT pipeline with GlaiveAI focus
 - [ ] Code: PeftTrainer setup
 - [ ] Demo: Model with `<reasoning>` output
 - [ ] Face (optional): Intro and outro

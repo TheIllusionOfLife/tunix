@@ -192,7 +192,7 @@ DATASET_PATH = "/kaggle/input/tunix-sft-data"
 SFT_OUTPUT_DIR = "/kaggle/working/sft_checkpoint"
 
 # Tuning Hyperparams - Adjust these for HP tuning
-SFT_STEPS = 8000  # ~2 epochs with 122k samples, effective batch 32
+SFT_STEPS = 22500  # ~4 epochs with 180K samples, effective batch 32
 TRAIN_BATCH_SIZE = 8 # Per-step batch size across all 8 TPU chips (1 sample/chip)
 GRADIENT_ACCUMULATION = 4  # Effective batch = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION
 EFFECTIVE_BATCH = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION  # 32
@@ -319,247 +319,104 @@ except Exception as e:
 
     # --- Data Preprocessing Cell ---
     data_preprocessing_cell = nbf.v4.new_code_cell("""
-# --- Data Preprocessing ---
-# Download and process diverse domain datasets
+# --- Data Preprocessing (GlaiveAI-Only) ---
+# Strategy: Single high-quality dataset aligned with competition goals
 
-print("Loading datasets from Kaggle/HuggingFace...")
+print("Loading GlaiveAI dataset...")
 
-def standardize_to_gemma_format(text, question=None):
-    '''Convert various formats to Gemma chat template with <reasoning>/<answer> tags'''
+def standardize_glaive_format(prompt, response):
+    '''Convert GlaiveAI <think> format to <reasoning>/<answer> tags'''
     
-    # Handle already formatted text
-    if "<start_of_turn>" in text:
-        # Just ensure we have our tags (case insensitive replacement)
-        text = re.sub(r"<think>", "<reasoning>", text, flags=re.IGNORECASE)
-        text = re.sub(r"</think>", "</reasoning>", text, flags=re.IGNORECASE)
-        text = re.sub(r"<thought>", "<reasoning>", text, flags=re.IGNORECASE)
-        text = re.sub(r"</thought>", "</reasoning>", text, flags=re.IGNORECASE)
-        
-        # Case 1: Has <answer> but no <reasoning> - wrap content before <answer> as reasoning
-        if "<answer>" in text and "<reasoning>" not in text and "<start_of_turn>model" in text:
-            match = re.search(r"<start_of_turn>model\\n(.*)(<answer>.*</answer>)", text, re.DOTALL)
-            if match:
-                pre_answer = match.group(1).strip()
-                answer_tag = match.group(2)
-                if pre_answer:
-                    new_content = f"<reasoning>{pre_answer}</reasoning>\\n{answer_tag}"
-                    text = re.sub(r"<start_of_turn>model\\n.*(<answer>.*</answer>)", 
-                                  f"<start_of_turn>model\\n{new_content}", text, flags=re.DOTALL)
-                else:
-                    # No content before answer - extract answer content as reasoning too
-                    answer_content = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL)
-                    if answer_content:
-                        text = re.sub(r"<start_of_turn>model\\n", 
-                                      f"<start_of_turn>model\\n<reasoning>{answer_content.group(1).strip()}</reasoning>\\n", text)
-        
-        # Case 2: Enforce <answer> tags if missing (sometimes models output just the answer after start_of_turn)
-        elif "<answer>" not in text and "<start_of_turn>model" in text:
-            # Heuristic: Wrap the last part of the model turn in answer tags if not present
-            match = re.search(r"<start_of_turn>model\\n(.*)$", text, re.DOTALL)
-            if match:
-                 content = match.group(1).strip()
-                 # If no reasoning tag either, wrap whole thing
-                 if "<reasoning>" not in content:
-                     text = text.replace(content, f"<answer>{content}</answer>")
-                 else:
-                     # Reasoning exists but no answer - extract answer from after </reasoning>
-                     parts = content.split("</reasoning>")
-                     if len(parts) > 1 and parts[1].strip():
-                         answer_part = parts[1].strip()
-                         text = text.replace(content, f"{parts[0]}</reasoning>\\n<answer>{answer_part}</answer>")
-                     else:
-                         # No content after reasoning, use reasoning summary as answer
-                         reasoning_match = re.search(r"<reasoning>(.*?)</reasoning>", content, re.DOTALL)
-                         if reasoning_match:
-                             # Use last sentence of reasoning as answer
-                             reasoning_text = reasoning_match.group(1).strip()
-                             sentences = reasoning_text.split(".")
-                             answer_fallback = sentences[-1].strip() if sentences else reasoning_text[:200]
-                             text = text + f"\\n<answer>{answer_fallback}</answer>"
-        return text
+    # GlaiveAI uses <think>...</think> for reasoning
+    text = response
     
-    # For raw question/response pairs
-    if question:
-        # Extract reasoning and answer from response
-        reasoning = ""
-        answer = ""
+    # Replace think tags with reasoning tags
+    text = re.sub(r"<think>", "<reasoning>", text, flags=re.IGNORECASE)
+    text = re.sub(r"</think>", "</reasoning>", text, flags=re.IGNORECASE)
+    
+    # Extract reasoning and answer parts
+    reasoning_match = re.search(r"<reasoning>(.*?)</reasoning>", text, re.DOTALL | re.IGNORECASE)
+    
+    if reasoning_match:
+        reasoning = reasoning_match.group(1).strip()
+        # Get content after </reasoning> as answer
+        remaining = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
         
-        # Try to extract think/reasoning
-        think_match = re.search(r"<think>(.*?)</think>", text, re.DOTALL | re.IGNORECASE)
-        thought_match = re.search(r"<Thought>(.*?)</Thought>", text, re.DOTALL | re.IGNORECASE)
-        reasoning_tag_match = re.search(r"<reasoning>(.*?)</reasoning>", text, re.DOTALL | re.IGNORECASE)
-        
-        if think_match:
-            reasoning = think_match.group(1).strip()
-        elif thought_match:
-            reasoning = thought_match.group(1).strip()
-        elif reasoning_tag_match:
-            reasoning = reasoning_tag_match.group(1).strip()
+        if remaining:
+            answer = remaining
         else:
-            # Use the whole text as reasoning if no specific tags found
-            reasoning = text.strip()
-        
-        # Try to extract answer
-        ans_match = re.search(r"<Output>(.*?)</Output>", text, re.DOTALL | re.IGNORECASE)
-        if ans_match:
-            answer = ans_match.group(1).strip()
-        else:
-            answer_match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL | re.IGNORECASE)
-            if answer_match:
-                answer = answer_match.group(1).strip()
-            else:
-                # If no explicit answer tag, assume the last paragraph is the answer
-                # or the whole text if reasoning was extracted from specific tags
-                if reasoning_tag_match or think_match or thought_match:
-                    # If reasoning was explicitly tagged, the rest is likely the answer
-                    # This is a heuristic and might need refinement for specific datasets
-                    remaining_text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL | re.IGNORECASE)
-                    remaining_text = re.sub(r"<think>.*?</think>", "", remaining_text, flags=re.DOTALL | re.IGNORECASE)
-                    remaining_text = re.sub(r"<Thought>.*?</Thought>", "", remaining_text, flags=re.DOTALL | re.IGNORECASE)
-                    answer = remaining_text.strip()
-                    if not answer and reasoning: # If no answer found, and reasoning was found, use reasoning as answer
-                        answer = reasoning
-                else:
-                    # If no specific tags for reasoning, and no answer tag,
-                    # try to split by paragraphs and take the last one as answer
-                    paragraphs = text.strip().split("\\n\\n")
-                    answer = paragraphs[-1] if paragraphs else text[:200] # Fallback to first 200 chars
-        
-        # Ensure reasoning and answer are not empty
-        if not reasoning and answer:
-            reasoning = answer # If only answer, use it as reasoning
-        elif not answer and reasoning:
-            answer = reasoning # If only reasoning, use it as answer
-        elif not reasoning and not answer:
-            reasoning = text.strip()
-            answer = text.strip()
-
-        formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{question}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{reasoning}</reasoning>\\n<answer>{answer}</answer>"
-        return formatted
+            # No content after reasoning - use summary
+            sentences = reasoning.split(".")
+            answer = sentences[-1].strip() if sentences else reasoning[:200]
+    else:
+        # No think tags - use whole response
+        reasoning = text[:500] if len(text) > 500 else text
+        answer = text
     
-    return text
+    # Format for Gemma
+    formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{prompt}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{reasoning}</reasoning>\\n<answer>{answer}</answer>"
+    return formatted
 
-# Load from Kaggle Dataset (pre-downloaded for efficiency)
+# Load from Kaggle Dataset (pre-downloaded parquet)
+all_texts = []
+
 try:
-    # Primary: Load pre-processed data from Kaggle Dataset
-    all_texts = []
-    
-    # Try loading from attached dataset
     if os.path.exists(DATASET_PATH):
         import glob
-        # Load Parquet files (Preferred)
-        for parquet_file in glob.glob(f"{DATASET_PATH}/*.parquet"):
-            ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
-            print(f"Loaded {len(ds)} samples from {parquet_file}")
-            
-            # Identify dataset type based on filename
-            fname = os.path.basename(parquet_file).lower()
-            
-            # 1. CoT-Collection (pre-sampled 10K)
-            if "cot_collection" in fname:
-                # CoT Collection: source (q), rationale (r), target (a)
-                # Data is pre-sampled to 10K, just load all rows
-                for sample in ds:
-                    q = sample.get("source", "")
-                    r = sample.get("rationale", "")
-                    a = sample.get("target", "")
-                    formatted = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{q}<end_of_turn>\\n<start_of_turn>model\\n<reasoning>{r}</reasoning>\\n<answer>{a}</answer>"
-                    all_texts.append({"text": formatted})
-
-            # 2. GlaiveAI-Reasoning
-            elif "glaive" in fname:
-                # Glaive: prompt, response (contains <think>...</think> then answer)
-                for sample in ds:
-                    q = sample.get("prompt", sample.get("question", sample.get("instruction", "")))
-                    a = sample.get("response", sample.get("answer", sample.get("output", "")))
-                    formatted = standardize_to_gemma_format(a, question=q)
-                    all_texts.append({"text": formatted})
-
-            # 3. OpenO1-SFT (pre-filtered English-only, instruction/output columns)
-            elif "openo1" in fname:
-                for sample in ds:
-                    q = sample.get("instruction", "")
-                    a = sample.get("output", "")
-                    if q and a:
-                        formatted = standardize_to_gemma_format(a, question=q)
-                        all_texts.append({"text": formatted})
-
-            # 4. Raiden (text column with pre-formatted conversation)
-            else: 
-                for sample in ds:
-                     # Check if pre-formatted 'text' field exists
-                     if "text" in sample:
-                         formatted = standardize_to_gemma_format(sample["text"])
-                         all_texts.append({"text": formatted})
-                     # Fallback to instruction/response pair
-                     elif ("prompt" in sample and "response" in sample):
-                         formatted = standardize_to_gemma_format(sample["response"], question=sample["prompt"])
-                         all_texts.append({"text": formatted})
-                     elif ("instruction" in sample and "output" in sample):
-                         formatted = standardize_to_gemma_format(sample["output"], question=sample["instruction"])
-                         all_texts.append({"text": formatted})
-
-    else:
-        print(f"Dataset path {DATASET_PATH} not found. Downloading from HuggingFace...")
+        parquet_files = glob.glob(f"{DATASET_PATH}/*.parquet")
         
-        # Fallback: Download from HuggingFace
-        # 1. Raiden-DeepSeek-R1 (main dataset) - Safety limit to prevent timeout
-        raiden = datasets.load_dataset("sequelbox/Raiden-DeepSeek-R1", split="train[:50000]") 
-        print(f"Downloaded Raiden: {len(raiden)} samples")
-        for sample in raiden:
-            prompt = sample.get("prompt", "")
-            response = sample.get("response", sample.get("completion", ""))
-            
-            # Filter: Skip long outputs (>4000 chars ~1K tokens) or empty/short samples
-            if len(response) > 4000 or len(response) < 50:
-                continue
+        if parquet_files:
+            for parquet_file in parquet_files:
+                ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
+                print(f"Loaded {len(ds)} samples from {os.path.basename(parquet_file)}")
                 
-            if prompt and response:
-                formatted = standardize_to_gemma_format(response, question=prompt)
-                all_texts.append({"text": formatted})
-        
-        # 2. OpenO1-SFT - Safety limit
-        try:
-            # Limited to 50K to prevent timeout
-            openo1 = datasets.load_dataset("O1-OPEN/OpenO1-SFT", split="train[:50000]")
-            print(f"Downloaded OpenO1: {len(openo1)} samples")
-            for sample in openo1:
-                instruction = sample.get("instruction", "")
-                output = sample.get("output", "")
-                
-                # Filter Chinese characters to prevent language leakage
-                if any(u'\u4e00' <= c <= u'\u9fff' for c in instruction + output):
-                    continue
+                for sample in ds:
+                    prompt = sample.get("prompt", "")
+                    response = sample.get("response", "")
                     
-                if instruction and output:
-                    formatted = standardize_to_gemma_format(output, question=instruction)
+                    # Filter: Skip very long outputs (>4000 chars ~1K tokens) or empty
+                    if len(response) > 4000 or len(response) < 50:
+                        continue
+                    
+                    formatted = standardize_glaive_format(prompt, response)
                     all_texts.append({"text": formatted})
-        except Exception as e:
-            print(f"Skipping OpenO1: {e}")
+        else:
+            raise FileNotFoundError("No parquet files found")
+    else:
+        raise FileNotFoundError(f"Dataset path {DATASET_PATH} not found")
 
-        # 3. GlaiveAI-Reasoning
-        try:
-            # Keep limit for Glaive as it's huge, but increase slightly to 30k
-            glaive = datasets.load_dataset("glaiveai/reasoning-v1-20m", split="train[:30000]")
-            print(f"Downloaded GlaiveAI: {len(glaive)} samples")
-            for sample in glaive:
-                instruction = sample.get("instruction", "")
-                output = sample.get("output", "")
-                if instruction and output:
-                    formatted = standardize_to_gemma_format(output, question=instruction)
-                    all_texts.append({"text": formatted})
-        except Exception as e:
-            print(f"Skipping GlaiveAI: {e}")
-
-    print(f"Total samples after preprocessing: {len(all_texts)}")
-    
-    # Create HuggingFace dataset
-    sft_dataset = datasets.Dataset.from_list(all_texts)
-    sft_dataset = sft_dataset.shuffle(seed=42)
-    
 except Exception as e:
-    print(f"CRITICAL: Failed to load datasets: {e}")
-    raise RuntimeError(f"Dataset loading failed: {e}")
+    print(f"Kaggle dataset not found, downloading from HuggingFace...")
+    print(f"Warning: This may be slow. Pre-download recommended.")
+    
+    # Fallback: Stream from HuggingFace
+    ds = datasets.load_dataset("glaiveai/reasoning-v1-20m", split="train", streaming=True)
+    
+    count = 0
+    limit = 180000  # Match our target
+    
+    for sample in ds:
+        prompt = sample.get("prompt", "")
+        response = sample.get("response", "")
+        
+        if len(response) > 4000 or len(response) < 50:
+            continue
+            
+        formatted = standardize_glaive_format(prompt, response)
+        all_texts.append({"text": formatted})
+        
+        count += 1
+        if count % 10000 == 0:
+            print(f"  Downloaded {count} samples...")
+        
+        if count >= limit:
+            break
+
+print(f"Total samples after preprocessing: {len(all_texts)}")
+
+# Create HuggingFace dataset
+sft_dataset = datasets.Dataset.from_list(all_texts)
+sft_dataset = sft_dataset.shuffle(seed=42)
 
 print(f"Final SFT dataset: {len(sft_dataset)} samples")
 print(f"Sample: {sft_dataset[0]['text'][:500]}...")
@@ -956,21 +813,25 @@ print(f"Unrestricted Mode Model ID: {unrestricted_kaggle_model}")
     other_info = nbf.v4.new_markdown_cell("""
 ## Other things I want the judges to know
 
-### 1. Learnings
-*   **Domain Matters More Than Method**: Competition FAQ explicitly states verifiable tasks (math/code) have "much lower weights". We prioritized diverse domains (creative, analytical, philosophical) over math/code.
-*   **SFT Efficiency**: We processed ~123K samples vs ~1,500 GRPO steps in the same 9-hour window. SFT provides dense supervision at every token.
-*   **Reasoning Trace Quality**: Datasets like Raiden-DeepSeek-R1 are rare finds - most reasoning datasets focus on math/code where verification is easier.
+### 1. Why GlaiveAI-Only
+*   **Quality Over Quantity**: One 2025 dataset (DeepSeek-R1-Distill-70B) beats multiple older, mixed-quality sources.
+*   **Competition Alignment**: GlaiveAI focuses on non-math/code (social science, creative writing) - exactly what FAQ says matters most.
+*   **Consistency**: Single source = no format standardization issues across datasets.
 
-### 2. Data Sources (All Public, Apache 2.0/MIT/CC-BY)
-*   sequelbox/Raiden-DeepSeek-R1 - Creative & analytical reasoning
-*   O1-OPEN/OpenO1-SFT - General reasoning with explicit <Thought>/<Output> tags
-*   pharaouk/CoT-Collection - Commonsense & ethics tasks
-*   glaiveai/reasoning-v1-20m - Non-math/code: social science, creative writing
+### 2. Dataset Dropped (and Why)
+*   ❌ CoT-Collection - Created 2023, outdated model quality
+*   ❌ Raiden-DeepSeek-R1 - Unfiltered R1 outputs, infinite loops
+*   ❌ OpenO1-SFT - Math/code focus, misaligned with competition
 
-### 3. Key Design Decisions
-*   **Format Standardization**: All datasets converted to consistent `<reasoning>`/`<answer>` tags
-*   **LoRA Training**: Efficient parameter updates for 9-hour constraint
-*   **Domain Priority**: Creative > Analytical > Philosophical > General > (Math/Code deprioritized)
+### 3. Data Source
+*   ✅ glaiveai/reasoning-v1-20m (180K samples, Apache 2.0)
+*   DeepSeek-R1-Distill-Llama-70B reasoning traces
+*   Non-math/code focus: social science, creative writing, analytical reasoning
+
+### 4. Training Config
+*   **Steps**: 22,500 (~4 epochs)
+*   **Runtime**: ~7 hours
+*   **Method**: LoRA (efficient parameter updates)
 """)
 
     # Assemble notebook

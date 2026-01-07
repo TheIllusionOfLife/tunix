@@ -1,32 +1,17 @@
-# Kaggle Submission Memo (SFT Strategy)
+# Kaggle Submission Memo (GlaiveAI-Only Strategy)
 
 ## 1. Prepare Data
 
-### Kaggle Datasets to Create
+### Kaggle Dataset: `tunix-sft-data`
 
-**Dataset 1: `tunix-sft-data`** (Single Session)
+Upload from `data/`:
+- `glaiveai_180k.parquet` (180K samples)
 
-Upload these pre-sampled parquet files from `data/`:
-- `raiden_deepseek_r1.parquet` (62.9K)
-- `openo1_sft_english_20k.parquet` (20K)
-- `cot_collection_10k.parquet` (10K)
-- `glaiveai_30k.parquet` (30K)
+### Data Source
 
-**Dataset 2: `tunix-sft-continuation-data`** (Unrestricted)
-
-Upload:
-- `glaiveai_continuation_100k.parquet` (100K)
-
-### Data Sources Documentation
-
-Include `DATA_SOURCES.md` (already in `data/` folder):
-
-| Dataset | Full Size | Included | Method |
-|:---|---:|---:|:---|
-| Raiden-DeepSeek-R1 | 62,925 | 62,925 | Full |
-| OpenO1-SFT | 77,685 | 20,000 | English filter + Random |
-| CoT-Collection | 1,837,928 | 10,000 | Reservoir |
-| GlaiveAI | 22,200,000+ | 30,000 | First N |
+| Dataset | Samples | Slice |
+|---------|---------|-------|
+| GlaiveAI | 180,000 | `train[:180000]` |
 
 ---
 
@@ -51,9 +36,9 @@ Include `DATA_SOURCES.md` (already in `data/` folder):
 
 Notebook will:
 1. Install Tunix and dependencies
-2. Load pre-sampled parquet files
+2. Load GlaiveAI parquet file
 3. Initialize Gemma 2B-IT with LoRA
-4. Run SFT for ~3000 steps
+4. Run SFT for ~22,500 steps (~7 hours)
 5. Save final checkpoint
 
 ---
@@ -62,7 +47,7 @@ Notebook will:
 
 Before submitting:
 - [ ] Run `python scripts/smoke_test_notebook.py` (must PASS)
-- [ ] Verify parquet files are in your Kaggle dataset
+- [ ] Verify `glaiveai_180k.parquet` is in Kaggle dataset
 - [ ] Check DATA_SOURCES.md is included
 - [ ] Test on CPU runtime first (quick syntax check)
 
@@ -78,8 +63,7 @@ Before submitting:
 
 ## Debugging Tips
 
-- **Smoke test locally**: `python scripts/smoke_test_notebook.py`
-- **Debug mode**: Set `MAX_STEPS=100` to quick test
-- **Memory issues**: Reduce batch size or sequence length
+- **Smoke test locally**: `python tests/smoke_test_notebook.py`
+- **Debug mode**: Set `SFT_STEPS=100` for quick test
+- **Memory issues**: Reduce batch size or `EVAL_MAX_TOKENS`
 - **Data errors**: Check preprocessing logs carefully
-- **Thrift errors**: Pre-sampled parquets should eliminate this
