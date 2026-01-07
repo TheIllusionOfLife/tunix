@@ -77,7 +77,7 @@ Dataset is split into two parquet files (90K each) to prevent OOM on Kaggle.
 TEMPERATURE=0.7
 TOP_K=50
 TOP_P=0.9
-MAX_GENERATION_STEPS=768
+MAX_GENERATION_STEPS=1024  # Aligned with EVAL_MAX_TOKENS
 
 # Output Tags
 REASONING_START = "<reasoning>"
