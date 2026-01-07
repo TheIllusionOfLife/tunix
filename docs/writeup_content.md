@@ -1,74 +1,75 @@
-# Kaggle Writeup Content (SFT Strategy)
+# Kaggle Competition Writeup
 
-## 1. Basic Details
+## Title
+**Tunix Zero-Cost: Teaching Reasoning Through Demonstration**
 
-**Title**: 
-`Tunix Zero-Cost: Teaching Reasoning Through Demonstration`
-
-**Subtitle**: 
-`SFT on high-quality GlaiveAI reasoning traces using only public data.`
-
-**Card Image**: 
-Diagram showing: `Gemma 2B-IT` → `[SFT on GlaiveAI]` → `Thinking Model`
+## Subtitle
+*High-quality SFT on 180K reasoning traces from DeepSeek-R1-Distill-70B*
 
 ---
 
-## 2. Project Description
+## Project Description
 
-### Supervised Fine-Tuning on GlaiveAI
+### The Challenge
+Small language models like Gemma 2B often answer questions too quickly without showing their reasoning process. The traditional approach uses reinforcement learning (GRPO) on math problems, but this has limitations:
+- Only ~1,500 steps possible in 9 hours
+- Focuses on math/code domains that have "much lower weights" per competition FAQ
+- Requires verifiable reward signals
 
-We chose **GlaiveAI-only** training after evaluating multiple datasets:
+### Our Approach: SFT on Reasoning Traces
+Instead of teaching the model to explore, we teach it to imitate high-quality thinking. Supervised Fine-Tuning (SFT) on explicit reasoning traces gives:
+- **Dense supervision**: Every token gets feedback, not just final answers
+- **Diverse domains**: Creative, analytical, philosophical reasoning
+- **Competition-aligned**: Focuses on what judges actually evaluate
 
-| Dataset | Decision | Reason |
-|---------|----------|--------|
-| GlaiveAI | ✅ **Use** | 2025 model, non-math/code focus |
-| CoT-Collection | ❌ Drop | 2023 models, outdated |
-| Raiden-DeepSeek-R1 | ❌ Drop | Unfiltered, infinite loops |
-| OpenO1-SFT | ❌ Drop | Math/code focus (deprioritized) |
+### Key Technical Decisions
 
-### Why GlaiveAI?
+1. **Single High-Quality Dataset**: We use GlaiveAI (glaiveai/reasoning-v1-20m), which features reasoning traces from DeepSeek-R1-Distill-Llama-70B. This 2025 dataset focuses on non-math/code domains like social science and creative writing.
 
-1. **Competition-aligned**: FAQ says math/code have "much lower weights"
-2. **2025 Quality**: DeepSeek-R1-Distill-70B reasoning
-3. **Focus**: Social science, creative writing, analytical domains
-4. **Scale**: 22M+ samples available
+2. **Format Standardization**: All responses are converted to `<reasoning>...</reasoning>` and `<answer>...</answer>` tags, teaching the model explicit structure.
 
-### Training Configuration
+3. **LoRA Training**: Low-rank adaptation enables efficient fine-tuning within the 9-hour constraint while achieving strong results.
 
-| Setting | Value |
-|---------|-------|
-| Samples | 180K |
-| Epochs | 4 |
+4. **Training Configuration**:
+   - 180K samples × 4 epochs
+   - ~22,500 training steps
+   - ~7 hours runtime
+
+### Why This Works
+The competition FAQ explicitly states that "verifiable tasks (math/coding) will have much lower weights." By training on high-quality reasoning from domains the competition actually values, we maximize evaluation performance.
+
+---
+
+## Training Details
+
+| Parameter | Value |
+|-----------|-------|
+| Base Model | Gemma 2B-IT |
+| Method | LoRA (rank=64, alpha=64) |
+| Dataset | GlaiveAI 180K |
 | Steps | ~22,500 |
-| Runtime | ~7 hours |
-
-### Implementation Details
-
-- **Library**: `google-tunix`, `flax`, `jax`
-- **Hardware**: Kaggle TPU VM v5e-8
-- **Method**: LoRA (Low-Rank Adaptation)
-- **Format**: `<reasoning>` / `<answer>` tags
-
-### Key Insight
-
-> "Quality over quantity: One 2025 dataset aligned with competition goals outperforms four mixed-quality datasets."
-
-### Unrestricted Mode
-
-For bonus points, we continue training using **100K fresh samples** from GlaiveAI (`train[180000:280000]`, non-overlapping with session 1).
+| Learning Rate | 2e-5 |
+| Batch Size | 32 (effective) |
+| Max Seq Length | 2048 |
 
 ---
 
-## 3. Learnings
+## Learnings
 
-- **Dataset Quality Matters**: 2023 datasets can't compete with 2025 reasoning quality
-- **Alignment > Diversity**: Better to focus on competition-aligned domains
-- **Single Source Benefits**: No format standardization issues
-- **GlaiveAI is Underrated**: Massive, high-quality, perfect for this competition
+1. **Quality > Quantity**: One curated 2025 dataset outperforms multiple older datasets
+2. **Alignment Matters**: Train on what the competition measures, not what's easy to verify
+3. **SFT Scales Better**: 180K samples in 7 hours vs ~1,500 GRPO steps
 
 ---
 
-## 4. Attachments
+## Unrestricted Mode
 
-- **Video**: YouTube link (< 3 min)
-- **Notebook**: `tunix_sft_train.ipynb`
+For the +15 bonus points, we continue training with 100K fresh samples from the same source (train[180000:280000]), using a lower learning rate (5e-6) for refinement.
+
+---
+
+## Data Source
+
+- **Dataset**: glaiveai/reasoning-v1-20m
+- **License**: Apache 2.0
+- **Samples Used**: 180K (single session) + 100K (unrestricted)
