@@ -813,25 +813,27 @@ print(f"Unrestricted Mode Model ID: {unrestricted_kaggle_model}")
     other_info = nbf.v4.new_markdown_cell("""
 ## Other things I want the judges to know
 
-### 1. Why GlaiveAI-Only
-*   **Quality Over Quantity**: One 2025 dataset (DeepSeek-R1-Distill-70B) beats multiple older, mixed-quality sources.
-*   **Competition Alignment**: GlaiveAI focuses on non-math/code (social science, creative writing) - exactly what FAQ says matters most.
-*   **Consistency**: Single source = no format standardization issues across datasets.
+### 1. Our Approach
+Instead of reinforcement learning (GRPO) on verifiable tasks, we teach reasoning through **demonstration**. SFT on high-quality reasoning traces provides:
+- **Dense supervision**: Every token gets feedback, not just final answers
+- **Diverse domains**: Creative, analytical, philosophical reasoning
+- **Competition-aligned**: Focuses on what judges actually evaluate
 
-### 2. Dataset Dropped (and Why)
-*   ❌ CoT-Collection - Created 2023, outdated model quality
-*   ❌ Raiden-DeepSeek-R1 - Unfiltered R1 outputs, infinite loops
-*   ❌ OpenO1-SFT - Math/code focus, misaligned with competition
+### 2. Why This Works
+The FAQ states "verifiable tasks (math/coding) will have **much lower weights**." By training on 180K reasoning traces from domains the competition values, we maximize evaluation performance.
 
-### 3. Data Source
-*   ✅ glaiveai/reasoning-v1-20m (180K samples, Apache 2.0)
-*   DeepSeek-R1-Distill-Llama-70B reasoning traces
-*   Non-math/code focus: social science, creative writing, analytical reasoning
+### 3. Technical Details
+| Parameter | Value |
+|-----------|-------|
+| Dataset | GlaiveAI (DeepSeek-R1-Distill-70B traces) |
+| Samples | 180K × 4 epochs |
+| Runtime | ~7 hours |
+| Method | LoRA (rank=64) |
 
-### 4. Training Config
-*   **Steps**: 22,500 (~4 epochs)
-*   **Runtime**: ~7 hours
-*   **Method**: LoRA (efficient parameter updates)
+### 4. Learnings
+- **Quality > Quantity**: One curated 2025 dataset outperforms multiple older datasets
+- **Alignment Matters**: Train on what the competition measures
+- **SFT Scales**: 180K samples in 7 hours vs ~1,500 GRPO steps
 """)
 
     # Assemble notebook
