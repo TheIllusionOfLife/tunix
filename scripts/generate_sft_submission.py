@@ -901,7 +901,7 @@ print(f"Unrestricted Mode Model ID: {unrestricted_kaggle_model}")
 *   sequelbox/Raiden-DeepSeek-R1 - Creative & analytical reasoning
 *   O1-OPEN/OpenO1-SFT - General reasoning with explicit <Thought>/<Output> tags
 *   pharaouk/CoT-Collection - Commonsense & ethics tasks
-*   glaiveai/reasoning-v1-20m - Math/Code/General tasks
+*   glaiveai/reasoning-v1-20m - Non-math/code: social science, creative writing
 
 ### 3. Key Design Decisions
 *   **Format Standardization**: All datasets converted to consistent `<reasoning>`/`<answer>` tags
