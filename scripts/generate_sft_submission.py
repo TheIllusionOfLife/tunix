@@ -865,14 +865,67 @@ try:
     
     print(f"Format Validation: {valid_format_count}/{len(test_prompts)} passed.")
     
-    # Safe WandB Logging
+    # Extended WandB Evaluation (25 prompts for statistical confidence)
+    WANDB_EVAL_PROMPTS = [
+        # Original 10 prompts
+        *test_prompts,
+        # Additional 15 prompts for diversity
+        "Explain quantum entanglement to a high school student.",
+        "Write a poem about the passage of time.",
+        "What are the pros and cons of remote work?",
+        "Describe how a compiler works step by step.",
+        "Compare democracy and authoritarianism objectively.",
+        "Write a short dialogue between a human and an AI about consciousness.",
+        "Explain the greenhouse effect and its consequences.",
+        "How would you teach a child about money management?",
+        "What lessons can we learn from the fall of ancient Rome?",
+        "Design a simple mobile app for tracking habits.",
+        "Explain the difference between correlation and causation.",
+        "Write a persuasive argument for learning a second language.",
+        "How do vaccines work to protect against diseases?",
+        "What ethical considerations arise with genetic engineering?",
+        "Explain the concept of supply and demand with examples.",
+    ]
+    
+    # Run extended evaluation for WandB
     try:
-        if wandb.run is not None:
-            tbl = wandb.Table(columns=["Prompt", "Output", "IsValid"], data=results_for_wandb)
+        if wandb.run is not None and WANDB_ENABLED:
+            print("\\nRunning Extended WandB Evaluation (25 prompts)...")
+            extended_formatted = [TEMPLATE.format(question=p) for p in WANDB_EVAL_PROMPTS]
+            extended_out = inference_sampler(
+                input_strings=extended_formatted,
+                max_generation_steps=MAX_SEQ_LEN,
+                temperature=0.7,
+                top_k=50,
+                top_p=0.95,
+                echo=False
+            )
+            
+            extended_results = []
+            extended_valid = 0
+            for p, o in zip(WANDB_EVAL_PROMPTS, extended_out.text):
+                has_r = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
+                has_a = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
+                is_valid = has_r and has_a
+                if is_valid:
+                    extended_valid += 1
+                extended_results.append([p, o[:1000], is_valid])  # Truncate for table
+            
+            # Log table
+            tbl = wandb.Table(columns=["Prompt", "Output", "IsValid"], data=extended_results)
             wandb.log({"eval_results": tbl})
-            print("Logged results to WandB Table.")
+            
+            # Log summary metrics
+            format_compliance = extended_valid / len(WANDB_EVAL_PROMPTS) * 100
+            wandb.log({
+                "eval/format_compliance_pct": format_compliance,
+                "eval/total_prompts": len(WANDB_EVAL_PROMPTS),
+                "eval/valid_count": extended_valid,
+            })
+            print(f"Extended Evaluation: {extended_valid}/{len(WANDB_EVAL_PROMPTS)} ({format_compliance:.1f}%) passed.")
+            print("Logged to WandB: eval_results table + summary metrics.")
     except Exception as w_err:
-        print(f"WandB logging skipped: {w_err}")
+        print(f"Extended WandB eval skipped: {w_err}")
 
 except Exception as e:
     print(f"Evaluation failed: {e}")
