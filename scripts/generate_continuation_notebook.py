@@ -36,7 +36,7 @@ PREV_CHECKPOINT_PATH = "/kaggle/input/tunix-session1-checkpoint/final_sft_model/
 CONTINUATION_DATA_PATH = "/kaggle/input/tunix-sft-continuation-data"
 
 # Training Hyperparams - Adjust for HP tuning
-SFT_STEPS = 5000  # More steps for extended training
+SFT_STEPS = 5000  # ~1.6 epochs with 100K fresh GlaiveAI samples
 LEARNING_RATE = 5e-6  # Lower LR for continuation (try: 1e-5, 5e-6, 2e-6)
 WARMUP_STEPS = 100  # Warmup steps
 TRAIN_BATCH_SIZE = 2
