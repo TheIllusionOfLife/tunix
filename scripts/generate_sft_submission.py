@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """
 SFT Notebook Generator for Tunix Competition
-Strategy: Supervised Fine-Tuning on diverse domain reasoning traces
+Strategy: Supervised Fine-Tuning on GlaiveAI reasoning traces
 
-Datasets:
-- Raiden-DeepSeek-R1 (62.9K creative/analytical)
-- OpenO1-SFT (20K general reasoning)
-- CoT-Collection (10K commonsense/ethics)
-- GlaiveAI-Reasoning (30K math/code/general)
+Dataset:
+- GlaiveAI (180K non-math/code reasoning traces from DeepSeek-R1-Distill-70B)
 """
 
 import nbformat as nbf
@@ -19,39 +16,36 @@ def create_notebook():
     # --- Cell 1: Title ---
     title_cell = nbf.v4.new_markdown_cell("""# Tunix SFT: Teaching Reasoning Through Demonstration
 
-**Strategy**: Supervised Fine-Tuning on high-quality reasoning traces across diverse domains.
+**Strategy**: Supervised Fine-Tuning on 180K high-quality reasoning traces from GlaiveAI.
 
 **Key Insight**: For 2B parameter models, learning from demonstrations is more effective than reinforcement learning. SFT provides dense supervision at every token, while RL provides sparse rewards only at sequence end.
 
-**Datasets**: 
-- Raiden-DeepSeek-R1 (Creative/Analytical)
-- OpenO1-SFT (General Reasoning)
-- CoT-Collection (Commonsense/Ethics)
-- GlaiveAI-Reasoning (Math/Code/General)
+**Dataset**: GlaiveAI (glaiveai/reasoning-v1-20m)
+- Source: DeepSeek-R1-Distill-Llama-70B reasoning traces
+- Focus: Non-math/code domains (social science, creative writing, analytical reasoning)
+- License: Apache 2.0
 """)
 
     # --- Strategy Cell ---
     strategy_cell = nbf.v4.new_markdown_cell("""
 ## Overall training and evaluation strategy
 
-**Strategy: SFT on Diverse Domain Reasoning Traces**
+**Strategy: SFT on GlaiveAI Reasoning Traces**
 
 Competition FAQ explicitly states that verifiable tasks (math/coding) have "much lower weights". Our strategy prioritizes non-verifiable domains:
 
 1.  **Base Model**: We start with `Gemma-2-2b-it` for its instruction-following foundation.
-2.  **SFT Training**: We fine-tune on ~100K reasoning traces from diverse domains (creative, analytical, philosophical, commonsense).
+2.  **SFT Training**: We fine-tune on 180K reasoning traces from GlaiveAI (non-math/code focus).
 3.  **Format**: All data uses explicit `<reasoning>` and `<answer>` tags for structured outputs.
 
 ## 🗺️ Workflow Diagram
 ```mermaid
 graph LR
     A[Gemma-2B-IT] --> B{SFT Training}
-    B -->|Creative| C[Raiden-DeepSeek-R1]
-    B -->|Reasoning| D[OpenO1-SFT]
-    B -->|Ethics| E[CoT-Collection]
-    B -->|General| F[GlaiveAI]
-    C & D & E & F --> G[Trained Model]
-    G --> H[Submission]
+    B --> C[GlaiveAI 180K]
+    C --> D["Format: <reasoning>/<answer>"]
+    D --> E[Trained Model]
+    E --> F[Submission]
 ```
 """)
 
@@ -59,16 +53,19 @@ graph LR
     dataset_cell = nbf.v4.new_markdown_cell("""
 ## How your finetuning dataset is created
 
-We employ a **Diverse Domain Strategy** using publicly available datasets with reasoning traces:
+We use a **single high-quality dataset** from GlaiveAI, chosen for alignment with competition evaluation:
 
 | Dataset | Source | Samples | Domain | License |
 |:---|:---|:---:|:---|:---|
-| Raiden-DeepSeek-R1 | HuggingFace | 62.9K | Creative/Analytical | Apache 2.0 |
-| OpenO1-SFT | HuggingFace | 20K (English-only) | General Reasoning | Apache 2.0 |
-| CoT-Collection | HuggingFace | 10K (pre-sampled) | Commonsense/Ethics | CC-BY-4.0 |
-| GlaiveAI-Reasoning | HuggingFace | 30K | Non-math/code | Apache 2.0 |
+| GlaiveAI | [glaiveai/reasoning-v1-20m](https://huggingface.co/datasets/glaiveai/reasoning-v1-20m) | 180K | Non-math/code | Apache 2.0 |
 
-All datasets are pre-processed and attached as parquet files for reproducibility.
+**Why GlaiveAI-only?**
+- 2025 model quality (DeepSeek-R1-Distill-70B)
+- Focus on creative, analytical, and social science domains
+- Competition deprioritizes math/code (FAQ: "much lower weights")
+- Consistent format = easier standardization
+
+Dataset is split into two parquet files (90K each) to prevent OOM on Kaggle.
 """)
 
     # --- Finetuning Header ---
