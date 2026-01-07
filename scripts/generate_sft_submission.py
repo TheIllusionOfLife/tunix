@@ -207,6 +207,12 @@ ALPHA = 64.0
 
 # Sequence Length
 MAX_SEQ_LEN = 2048  # Critical: increased from 1024 to avoid truncating reasoning
+
+# Inference Hyperparams (shared across all evaluations)
+INFERENCE_TEMPERATURE = 0.7
+INFERENCE_TOP_K = 50
+INFERENCE_TOP_P = 0.95
+EVAL_MAX_TOKENS = 1024  # Max tokens for eval generation (less than MAX_SEQ_LEN to save memory)
 """)
 
     # --- Model Utilities Cell ---
@@ -632,10 +638,10 @@ try:
     formatted = [TEMPLATE.format(question=p) for p in EVAL_PROMPTS]
     baseline_out = baseline_sampler(
         input_strings=formatted,
-        max_generation_steps=MAX_SEQ_LEN,
-        temperature=0.7,
-        top_k=50,
-        top_p=0.95,
+        max_generation_steps=EVAL_MAX_TOKENS,
+        temperature=INFERENCE_TEMPERATURE,
+        top_k=INFERENCE_TOP_K,
+        top_p=INFERENCE_TOP_P,
         echo=False
     )
     print("--- Baseline Outputs (Before Training) ---")
@@ -833,10 +839,10 @@ try:
     
     out_data = inference_sampler(
         input_strings=formatted_prompts,
-        max_generation_steps=MAX_SEQ_LEN,
-        temperature=0.7,
-        top_k=50,
-        top_p=0.95,
+        max_generation_steps=EVAL_MAX_TOKENS,
+        temperature=INFERENCE_TEMPERATURE,
+        top_k=INFERENCE_TOP_K,
+        top_p=INFERENCE_TOP_P,
         echo=False
     )
     
@@ -890,26 +896,31 @@ try:
     # Run extended evaluation for WandB
     try:
         if wandb.run is not None and WANDB_ENABLED:
-            print("\\nRunning Extended WandB Evaluation (25 prompts)...")
-            extended_formatted = [TEMPLATE.format(question=p) for p in WANDB_EVAL_PROMPTS]
-            extended_out = inference_sampler(
-                input_strings=extended_formatted,
-                max_generation_steps=MAX_SEQ_LEN,
-                temperature=0.7,
-                top_k=50,
-                top_p=0.95,
-                echo=False
-            )
-            
+            print("\\nRunning Extended WandB Evaluation (25 prompts in batches)...")
             extended_results = []
             extended_valid = 0
-            for p, o in zip(WANDB_EVAL_PROMPTS, extended_out.text):
-                has_r = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
-                has_a = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
-                is_valid = has_r and has_a
-                if is_valid:
-                    extended_valid += 1
-                extended_results.append([p, o[:1000], is_valid])  # Truncate for table
+            BATCH_SIZE = 5  # Process in smaller batches to avoid OOM
+            
+            for batch_start in range(0, len(WANDB_EVAL_PROMPTS), BATCH_SIZE):
+                batch_prompts = WANDB_EVAL_PROMPTS[batch_start:batch_start + BATCH_SIZE]
+                batch_formatted = [TEMPLATE.format(question=p) for p in batch_prompts]
+                batch_out = inference_sampler(
+                    input_strings=batch_formatted,
+                    max_generation_steps=EVAL_MAX_TOKENS,
+                    temperature=INFERENCE_TEMPERATURE,
+                    top_k=INFERENCE_TOP_K,
+                    top_p=INFERENCE_TOP_P,
+                    echo=False
+                )
+                
+                for p, o in zip(batch_prompts, batch_out.text):
+                    has_r = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
+                    has_a = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
+                    is_valid = has_r and has_a
+                    if is_valid:
+                        extended_valid += 1
+                    extended_results.append([p, o[:1000], is_valid])  # Truncate for table
+                print(f\"  Batch {batch_start//BATCH_SIZE + 1}/{(len(WANDB_EVAL_PROMPTS) + BATCH_SIZE - 1)//BATCH_SIZE} complete.\")
             
             # Log table
             tbl = wandb.Table(columns=["Prompt", "Output", "IsValid"], data=extended_results)
