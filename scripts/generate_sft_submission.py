@@ -191,11 +191,19 @@ MODEL_ID = "google/gemma-2-2b-it"
 DATASET_PATH = "/kaggle/input/tunix-sft-data"
 SFT_OUTPUT_DIR = "/kaggle/working/sft_checkpoint"
 
-# Tuning Hyperparams
-SFT_STEPS = 4000  # Increased for full epoch coverage (>128k samples)
+# Tuning Hyperparams - Adjust these for HP tuning
+SFT_STEPS = 8000  # ~2 epochs with 122k samples, effective batch 32
 TRAIN_BATCH_SIZE = 8 # Per-step batch size across all 8 TPU chips (1 sample/chip)
-GRADIENT_ACCUMULATION = 4  # Effective batch = 8 * 4 = 32
+GRADIENT_ACCUMULATION = 4  # Effective batch = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION
 EFFECTIVE_BATCH = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION  # 32
+
+# Learning Rate - Key HP for tuning
+LEARNING_RATE = 2e-5  # Try: 5e-5, 2e-5, 1e-5
+WARMUP_STEPS = 200  # Warmup before reaching peak LR
+
+# LoRA Hyperparams
+RANK = 64
+ALPHA = 64.0
 """)
 
     # --- Model Utilities Cell ---
@@ -223,9 +231,7 @@ def get_gemma_model(ckpt_path):
     return gemma, mesh, model_config
 
 def get_lora_model(base_model, mesh):
-    # Tunix LoRA Config
-    RANK = 64
-    ALPHA = 64.0
+    # LoRA config uses RANK and ALPHA from constants
     lora_provider = qwix.LoraProvider(
         module_path=(
             ".*q_einsum|.*kv_einsum|.*gate_proj|.*down_proj|.*up_proj|"
@@ -251,7 +257,19 @@ def get_lora_model(base_model, mesh):
 
     # --- WandB Cell ---
     wandb_cell = nbf.v4.new_code_cell("""
-# --- Optional: WandB Logging ---
+# --- WandB Logging with Metrics Backend ---
+WANDB_ENABLED = False
+
+# Define WandB Backend for MetricsLogger
+class WandbBackend:
+    '''Custom backend to stream metrics to WandB during training'''
+    def log_scalar(self, event: str, value, **kwargs):
+        if WANDB_ENABLED:
+            step = kwargs.get("step", 0)
+            wandb.log({event: float(value)}, step=step)
+    def close(self):
+        pass
+
 try:
     import wandb
     from kaggle_secrets import UserSecretsClient
@@ -261,16 +279,32 @@ try:
 
     if secret_value:
         wandb.login(key=secret_value)
-        wandb.init(project="tunix-sft-diverse", name="sft-run-v1", anonymous="allow")
-        print("WandB Logging Enabled.")
+        # Log hyperparameters to WandB config
+        wandb.init(
+            project="tunix-sft-diverse",
+            name="sft-run-v2",
+            anonymous="allow",
+            config={
+                "sft_steps": SFT_STEPS,
+                "learning_rate": LEARNING_RATE,
+                "warmup_steps": WARMUP_STEPS,
+                "train_batch_size": TRAIN_BATCH_SIZE,
+                "gradient_accumulation": GRADIENT_ACCUMULATION,
+                "effective_batch": EFFECTIVE_BATCH,
+                "max_seq_len": MAX_SEQ_LEN,
+                "lora_rank": RANK,
+                "lora_alpha": ALPHA,
+                "model_id": MODEL_ID,
+            }
+        )
+        WANDB_ENABLED = True
+        print("WandB Logging Enabled with hyperparameter tracking.")
     else:
         raise ValueError("Empty WANDB_API_KEY")
 
 except Exception as e:
     print(f"WandB not enabled: {e}")
     os.environ["WANDB_MODE"] = "disabled"
-    if 'wandb' in locals():
-        wandb.init = lambda *args, **kwargs: None
     print("Proceeding without cloud logging (WANDB_MODE='disabled').")
 """)
 
@@ -467,8 +501,8 @@ try:
             prompt = sample.get("prompt", "")
             response = sample.get("response", sample.get("completion", ""))
             
-            # Filter: Skip infinite loops (>8000 chars) or empty/short samples
-            if len(response) > 8000 or len(response) < 50:
+            # Filter: Skip long outputs (>4000 chars ~1K tokens) or empty/short samples
+            if len(response) > 4000 or len(response) < 50:
                 continue
                 
             if prompt and response:
@@ -559,35 +593,60 @@ tokenizer = tokenizer_lib.Tokenizer(
     tokenizer_path=os.path.join(kaggle_ckpt_path, "tokenizer.model")
 )
 
-# 4. Baseline Evaluation
+# 4. Baseline Evaluation (Same prompts as post-training for comparison)
 print("Running Baseline Evaluation...")
+EVAL_PROMPTS = [
+    # Creative writing
+    "Write a short story about a robot learning to paint.",
+    "Write a haiku about artificial intelligence.",
+    # Creative ideation
+    "Propose three innovative uses for AI in education.",
+    # Summarization
+    "Summarize the key benefits and risks of renewable energy in 3 paragraphs.",
+    # Math (verifiable)
+    "Solve step-by-step: If 2x + 5 = 15, what is x?",
+    # Coding (verifiable)
+    "Write a Python function to check if a string is a palindrome.",
+    # Basic science
+    "Explain why the sky is blue to a 5-year-old.",
+    "Explain the process of photosynthesis step by step.",
+    # Ethics/Reasoning
+    "What are the ethical implications of AI in healthcare?",
+    "Should AI systems have rights? Argue both sides.",
+]
+
 try:
     baseline_sampler = sampler_lib.Sampler(
         transformer=base_model,
         tokenizer=tokenizer,
         cache_config=sampler_lib.CacheConfig(
-            cache_size=512,
+            cache_size=MAX_SEQ_LEN + 512,
             num_layers=model_config.num_layers,
             num_kv_heads=model_config.num_kv_heads,
             head_dim=model_config.head_dim,
         ),
     )
-    test_prompts = [
-        "What are the ethical implications of AI in healthcare?",
-        "Explain the concept of opportunity cost in simple terms."
-    ]
-    formatted = [TEMPLATE.format(question=p) for p in test_prompts]
+    formatted = [TEMPLATE.format(question=p) for p in EVAL_PROMPTS]
     baseline_out = baseline_sampler(
         input_strings=formatted,
-        max_generation_steps=150,
+        max_generation_steps=MAX_SEQ_LEN,
         temperature=0.7,
+        top_k=50,
+        top_p=0.95,
         echo=False
     )
     print("--- Baseline Outputs (Before Training) ---")
-    for p, o in zip(test_prompts, baseline_out.text):
-        print(f"Q: {p}\\nA: {o[:300]}...\\n{'-'*40}")
+    baseline_results = []
+    for p, o in zip(EVAL_PROMPTS, baseline_out.text):
+        print(f"Q: {p}")
+        print(f"A: {o}")  # Full output
+        has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
+        has_answer = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
+        baseline_results.append({"prompt": p, "output": o, "has_reasoning": has_reasoning, "has_answer": has_answer})
+        print("-"*40)
 except Exception as e:
     print(f"Baseline eval skipped: {e}")
+    baseline_results = []
 print("Baseline Done.")
 
 # 5. SFT Training
@@ -595,13 +654,13 @@ print("\\n" + "="*50)
 print("Starting SFT Training...")
 print("="*50)
 
-# Optimizer
+# Optimizer - Uses LEARNING_RATE from constants for HP tuning
 schedule = optax.warmup_cosine_decay_schedule(
     init_value=0.0,
-    peak_value=2e-5,
-    warmup_steps=100,
+    peak_value=LEARNING_RATE,
+    warmup_steps=WARMUP_STEPS,
     decay_steps=SFT_STEPS,
-    end_value=1e-6
+    end_value=LEARNING_RATE / 20  # End at 5% of peak
 )
 optimizer = optax.chain(
     optax.clip_by_global_norm(1.0),
@@ -672,7 +731,14 @@ def create_data_iterator(dataset, batch_size, tokenizer):
                 "attention_mask": attention_mask
             }
 
-# Training Configuration
+# Training Configuration with WandB Metrics Backend
+from tunix.sft import metrics_logger as sft_metrics_logger
+
+metrics_logging_options = sft_metrics_logger.MetricsLoggerOptions(
+    log_dir="/kaggle/working/logs",
+    backend_factories=[WandbBackend] if WANDB_ENABLED else []
+)
+
 training_config = peft_trainer.TrainingConfig(
     max_steps=SFT_STEPS,
     checkpoint_root_directory=SFT_OUTPUT_DIR,
@@ -680,6 +746,7 @@ training_config = peft_trainer.TrainingConfig(
     checkpointing_options=checkpoint_options,
     pbar_description="SFT Training",
     metrics_prefix="sft",
+    metrics_logging_options=metrics_logging_options,
     eval_every_n_steps=10000, # Disable freq eval for speed or set high
 )
 
@@ -741,12 +808,27 @@ try:
     )
 
     test_prompts = [
-        "What are the ethical implications of AI in healthcare?",
-        "Write a short story about a robot learning to paint.",
-        "Explain why the sky is blue to a 5-year-old.",
-        "Solve this math problem step-by-step: If 2x + 5 = 15, what is x?"
+        # Creative writing
+        \"Write a short story about a robot learning to paint.\",
+        \"Write a haiku about artificial intelligence.\",
+        # Creative ideation
+        \"Propose three innovative uses for AI in education.\",
+        # Summarization
+        \"Summarize the key benefits and risks of renewable energy in 3 paragraphs.\",
+        # Math (verifiable)
+        \"Solve step-by-step: If 2x + 5 = 15, what is x?\",
+        # Coding (verifiable)
+        \"Write a Python function to check if a string is a palindrome.\",
+        # Basic science
+        \"Explain why the sky is blue to a 5-year-old.\",
+        \"Explain the process of photosynthesis step by step.\",
+        # Ethics/Reasoning
+        \"What are the ethical implications of AI in healthcare?\",
+        \"Should AI systems have rights? Argue both sides.\",
     ]
     
+    # Use same prompts as baseline for fair comparison
+    test_prompts = EVAL_PROMPTS
     formatted_prompts = [TEMPLATE.format(question=p) for p in test_prompts]
     
     out_data = inference_sampler(
@@ -759,13 +841,13 @@ try:
     )
     
     # Validation Logic
-    print("--- Post-Training Outputs ---")
+    print(\"--- Post-Training Outputs ---\")
     valid_format_count = 0
     results_for_wandb = []
     
     for p, o in zip(test_prompts, out_data.text):
-        print(f"Prompt: {p}")
-        print(f"Output: {o[:500]}...")
+        print(f\"Prompt: {p}\")
+        print(f\"Output: {o}\")  # Full output, no truncation
         
         # Robust Regex Check
         has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))

@@ -30,18 +30,23 @@ def create_notebook():
 # Update these paths based on your Kaggle Dataset names
 
 # Path to checkpoint from Session 1 (Uploaded as Dataset)
-# Format: /kaggle/input/{dataset-name}/{folder-structure}
 PREV_CHECKPOINT_PATH = "/kaggle/input/tunix-session1-checkpoint/final_sft_model/checkpoint"
 
-# Path to continuation training data (Fresh GlaiveAI samples - NOT overlapping with session 1)
-# This is a NEW Kaggle dataset containing 100K samples from GlaiveAI (skipped first 30K used in session 1)
+# Path to continuation training data (Fresh GlaiveAI samples)
 CONTINUATION_DATA_PATH = "/kaggle/input/tunix-sft-continuation-data"
 
-# Training Config
+# Training Hyperparams - Adjust for HP tuning
 SFT_STEPS = 5000  # More steps for extended training
-LEARNING_RATE = 5e-6 # Lower LR for continuation
+LEARNING_RATE = 5e-6  # Lower LR for continuation (try: 1e-5, 5e-6, 2e-6)
+WARMUP_STEPS = 100  # Warmup steps
 TRAIN_BATCH_SIZE = 2
 GRADIENT_ACCUMULATION = 16
+EFFECTIVE_BATCH = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION  # 32
+MAX_SEQ_LEN = 2048
+
+# LoRA Hyperparams (must match session 1)
+RANK = 64
+ALPHA = 64.0
 
 # System Prompt (must match session 1)
 SYSTEM_PROMPT = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
@@ -114,6 +119,58 @@ print(f"JAX Devices: {jax.devices()}")
 # Constants
 MODEL_ID = "google/gemma-2-2b-it"
 SFT_OUTPUT_DIR = "/kaggle/working/sft_continuation_checkpoint"
+
+MODEL_ID = "google/gemma-2-2b-it"
+""")
+
+    # --- WandB Cell ---
+    wandb_cell = nbf.v4.new_code_cell("""
+# --- WandB Logging with Metrics Backend ---
+WANDB_ENABLED = False
+
+class WandbBackend:
+    '''Custom backend to stream metrics to WandB during training'''
+    def log_scalar(self, event: str, value, **kwargs):
+        if WANDB_ENABLED:
+            step = kwargs.get("step", 0)
+            wandb.log({event: float(value)}, step=step)
+    def close(self):
+        pass
+
+try:
+    import wandb
+    from kaggle_secrets import UserSecretsClient
+
+    user_secrets = UserSecretsClient()
+    secret_value = user_secrets.get_secret("WANDB_API_KEY")
+
+    if secret_value:
+        wandb.login(key=secret_value)
+        wandb.init(
+            project="tunix-sft-continuation",
+            name="sft-cont-v1",
+            anonymous="allow",
+            config={
+                "sft_steps": SFT_STEPS,
+                "learning_rate": LEARNING_RATE,
+                "warmup_steps": WARMUP_STEPS,
+                "train_batch_size": TRAIN_BATCH_SIZE,
+                "gradient_accumulation": GRADIENT_ACCUMULATION,
+                "effective_batch": EFFECTIVE_BATCH,
+                "max_seq_len": MAX_SEQ_LEN,
+                "lora_rank": RANK,
+                "lora_alpha": ALPHA,
+            }
+        )
+        WANDB_ENABLED = True
+        print("WandB Logging Enabled for continuation training.")
+    else:
+        raise ValueError("Empty WANDB_API_KEY")
+
+except Exception as e:
+    print(f"WandB not enabled: {e}")
+    os.environ["WANDB_MODE"] = "disabled"
+    print("Proceeding without cloud logging.")
 """)
 
     # --- Model Utilities ---
@@ -404,6 +461,14 @@ def create_data_iterator(dataset, batch_size, tokenizer):
                 "attention_mask": attention_mask
             }
 
+# Training Configuration with WandB Metrics Backend
+from tunix.sft import metrics_logger as sft_metrics_logger
+
+metrics_logging_options = sft_metrics_logger.MetricsLoggerOptions(
+    log_dir="/kaggle/working/logs",
+    backend_factories=[WandbBackend] if WANDB_ENABLED else []
+)
+
 training_config = peft_trainer.TrainingConfig(
     max_steps=SFT_STEPS,
     checkpoint_root_directory=SFT_OUTPUT_DIR,
@@ -411,6 +476,7 @@ training_config = peft_trainer.TrainingConfig(
     checkpointing_options=checkpoint_options,
     pbar_description="SFT Continuation",
     metrics_prefix="sft_cont",
+    metrics_logging_options=metrics_logging_options,
     eval_every_n_steps=10000,
 )
 
@@ -526,6 +592,7 @@ unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-sft-unrestricted"
         title_cell,
         config_cell,
         setup_cell,
+        wandb_cell,
         model_utils_cell,
         load_ckpt_cell,
         data_cell,

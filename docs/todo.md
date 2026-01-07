@@ -61,10 +61,10 @@ All datasets converted to:
 - [x] **Notebook**: Create `tunix_sft_train.ipynb`
 - [x] **Data Loading**: Pre-sampled parquets (~123K samples)
 - [x] **Smoke Test**: Syntax validation passing
-- [ ] **Upload**: Parquets to Kaggle dataset
-- [ ] **Training**: Run on Kaggle TPU
-- [ ] **Verify**: Check `<reasoning>` tags in outputs
-- [ ] **Save**: Checkpoint for unrestricted mode
+- [x] **Upload**: Parquets to Kaggle dataset
+- [x] **Training**: Run on Kaggle TPU
+- [x] **Verify**: Check `<reasoning>` tags in outputs
+- [x] **Save**: Checkpoint for unrestricted mode
 
 ---
 
@@ -75,7 +75,7 @@ All datasets converted to:
 - [ ] **Session 1 Output**: Upload as `tunix-session1-checkpoint`
 - [ ] **Session 2**: Run continuation training
 - [ ] **Session 3**: Optional polish
-- [ ] **Upload**: Final model to Kaggle Models
+- [x] **Upload**: Final model to Kaggle Models
 
 ---
 
