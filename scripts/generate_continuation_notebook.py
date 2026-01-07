@@ -119,8 +119,6 @@ print(f"JAX Devices: {jax.devices()}")
 # Constants
 MODEL_ID = "google/gemma-2-2b-it"
 SFT_OUTPUT_DIR = "/kaggle/working/sft_continuation_checkpoint"
-
-MODEL_ID = "google/gemma-2-2b-it"
 """)
 
     # --- WandB Cell ---
@@ -408,8 +406,6 @@ optimizer = optax.chain(
 checkpoint_options = ocp.CheckpointManagerOptions(
     save_interval_steps=500, max_to_keep=2
 )
-
-MAX_SEQ_LEN = 1024
 
 def create_data_iterator(dataset, batch_size, tokenizer):
     '''Create batches with tokenization and masking'''

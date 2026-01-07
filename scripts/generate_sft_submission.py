@@ -204,6 +204,9 @@ WARMUP_STEPS = 200  # Warmup before reaching peak LR
 # LoRA Hyperparams
 RANK = 64
 ALPHA = 64.0
+
+# Sequence Length
+MAX_SEQ_LEN = 2048  # Critical: increased from 1024 to avoid truncating reasoning
 """)
 
     # --- Model Utilities Cell ---
@@ -673,10 +676,7 @@ checkpoint_options = ocp.CheckpointManagerOptions(
     save_interval_steps=500, max_to_keep=2
 )
 
-# Data Iterator
-from tunix.sft import utils as sft_utils
-
-MAX_SEQ_LEN = 2048 # Critical fix: increased from 1024 to avoid truncating reasoning
+# Data Iterator\nfrom tunix.sft import utils as sft_utils
 
 def create_data_iterator(dataset, batch_size, tokenizer):
     '''Create batches with tokenization and masking'''
