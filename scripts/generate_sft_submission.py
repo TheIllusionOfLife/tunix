@@ -894,7 +894,7 @@ print(f"Unrestricted Mode Model ID: {unrestricted_kaggle_model}")
 
 ### 1. Learnings
 *   **Domain Matters More Than Method**: Competition FAQ explicitly states verifiable tasks (math/code) have "much lower weights". We prioritized diverse domains (creative, analytical, philosophical) over math/code.
-*   **SFT Efficiency**: We processed ~100K samples vs ~1,500 GRPO steps in the same 9-hour window. SFT provides dense supervision at every token.
+*   **SFT Efficiency**: We processed ~123K samples vs ~1,500 GRPO steps in the same 9-hour window. SFT provides dense supervision at every token.
 *   **Reasoning Trace Quality**: Datasets like Raiden-DeepSeek-R1 are rare finds - most reasoning datasets focus on math/code where verification is easier.
 
 ### 2. Data Sources (All Public, Apache 2.0/MIT/CC-BY)

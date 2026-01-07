@@ -32,7 +32,7 @@ We prioritized non-verifiable domains (creative, analytical, philosophical) over
 | GlaiveAI-Reasoning | 30K | First N |
 | **Total** | **~123K** | |
 
-All datasets feature explicit reasoning traces (`<think>` tags) distilled from frontier models.
+All datasets feature explicit reasoning traces (converted to `<reasoning>`/`<answer>` tags) distilled from frontier models.
 
 ### Implementation Details
 
@@ -40,7 +40,7 @@ All datasets feature explicit reasoning traces (`<think>` tags) distilled from f
 - **Hardware**: Kaggle TPU VM v5e-8
 - **Method**: LoRA (Low-Rank Adaptation) for efficient fine-tuning
 - **Data**: Pre-processed parquet files for reproducibility
-- **Runtime**: ~8 hours processing 120K+ samples
+- **Runtime**: Configurable (8K steps ~2.5 hours, 28K steps ~8.5 hours)
 
 ### Key Insight
 
