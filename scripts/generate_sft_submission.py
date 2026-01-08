@@ -363,7 +363,8 @@ def standardize_glaive_format(prompt, response):
     return formatted
 
 # Load from Kaggle Dataset (pre-downloaded parquet)
-all_texts = []
+# Uses streaming JSONL logic, no list initialization
+
 
 try:
     if os.path.exists(DATASET_PATH):
@@ -411,23 +412,30 @@ try:
 
             # 3. Pass 2: Loading & Formatting (Memory Safe)
             print("Pass 2: Loading and formatting selected samples...")
-            all_texts = []
             
-            for parquet_file in parquet_files:
-                ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
-                for sample in ds:
-                    prompt = sample.get("prompt", "")
-                    response = sample.get("response", "")
-                    
-                    # Apply selected filter
-                    if len(response) < 50: continue
-                    if selected_threshold is not None and len(response) > selected_threshold:
-                        continue
+            # Stream directly to JSONL file to avoid holding all strings in RAM
+            with open("sft_data.jsonl", "w") as f:
+                import json
+                for parquet_file in parquet_files:
+                    ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
+                    for sample in ds:
+                        prompt = sample.get("prompt", "")
+                        response = sample.get("response", "")
                         
-                    formatted = standardize_glaive_format(prompt, response)
-                    all_texts.append({"text": formatted})
+                        # Apply selected filter
+                        if len(response) < 50: continue
+                        if selected_threshold is not None and len(response) > selected_threshold:
+                            continue
+                            
+                        formatted = standardize_glaive_format(prompt, response)
+                        # Write line immediately
+                        f.write(json.dumps({"text": formatted}) + "\\n")
             
-            print(f"Final Dataset Size: {len(all_texts)}")
+            # Load using memory-mapped Arrow dataset
+            print("Loading dataset from JSONL (Memory Safe)...")
+            sft_dataset = datasets.load_dataset("json", data_files="sft_data.jsonl", split="train")
+            dataset_size = len(sft_dataset)
+            print(f"Final Dataset Size: {dataset_size}")
                 
         else:
             raise FileNotFoundError("No parquet files found")
@@ -445,34 +453,40 @@ except Exception as e:
     limit = 180000 
     FALLBACK_THRESHOLD = 15000
     
-    for sample in ds:
-        prompt = sample.get("prompt", "")
-        response = sample.get("response", "")
-        
-        if len(response) > FALLBACK_THRESHOLD or len(response) < 50:
-            continue
-        
-        formatted = standardize_glaive_format(prompt, response)
-        all_texts.append({"text": formatted})
-        
-        count += 1
-        if count % 10000 == 0:
-            print(f"  Downloaded {count} samples...")
+    # Stream fallback to JSONL as well
+    with open("sft_data.jsonl", "w") as f:
+        import json
+        for sample in ds:
+            prompt = sample.get("prompt", "")
+            response = sample.get("response", "")
+            
+            if len(response) > FALLBACK_THRESHOLD or len(response) < 50:
+                continue
+            
+            formatted = standardize_glaive_format(prompt, response)
+            f.write(json.dumps({"text": formatted}) + "\\n")
+            
+            count += 1
+            if count % 10000 == 0:
+                print(f"  Downloaded {count} samples...")
+
+            if count >= limit:
+                break
+    
+    sft_dataset = datasets.load_dataset("json", data_files="sft_data.jsonl", split="train")
+    dataset_size = len(sft_dataset)
 
 # --- Dynamic SFT Steps Calculation ---
 # Target: ~4 epochs
+# SAFETY: Use math.ceil and max(1, ...) to prevent 0 steps or rounding down
+import math
 TARGET_EPOCHS = 4
-SFT_STEPS = int((len(all_texts) * TARGET_EPOCHS) / EFFECTIVE_BATCH)
-print(f"Dynamic SFT Steps: {SFT_STEPS} (based on {len(all_texts)} samples, 4 epochs, effective batch {EFFECTIVE_BATCH})")
+SFT_STEPS = max(1, math.ceil((dataset_size * TARGET_EPOCHS) / EFFECTIVE_BATCH))
+print(f"Dynamic SFT Steps: {SFT_STEPS} (based on {dataset_size} samples, 4 epochs, effective batch {EFFECTIVE_BATCH})")
 
-        
-        if count >= limit:
-            break
+print(f"Total samples after preprocessing: {dataset_size}")
 
-print(f"Total samples after preprocessing: {len(all_texts)}")
-
-# Create HuggingFace dataset
-sft_dataset = datasets.Dataset.from_list(all_texts)
+# Shuffle
 sft_dataset = sft_dataset.shuffle(seed=42)
 
 print(f"Final SFT dataset: {len(sft_dataset)} samples")

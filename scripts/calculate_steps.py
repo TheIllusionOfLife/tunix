@@ -1,6 +1,7 @@
 import os
 import glob
 import datasets
+import math
 
 DATA_DIR = "data"
 parquet_files = glob.glob(os.path.join(DATA_DIR, "glaiveai_90k_part*.parquet"))
@@ -12,9 +13,10 @@ if not parquet_files:
 total_samples = 0
 threshold_counts = {10400: 0, 12500: 0, 15000: 0, None: 0}
 
-print("Scanning datasets...")
+print("Scanning datasets (Pass 1 - Counting)...")
 for pf in parquet_files:
-    ds = datasets.load_dataset("parquet", data_files=pf, split="train")
+    # Streaming load for memory efficiency in utility script too
+    ds = datasets.load_dataset("parquet", data_files=pf, split="train") # Local load is usually fine, but consistency is good
     for sample in ds:
         length = len(sample.get("response", ""))
         if length < 50: continue
@@ -45,8 +47,11 @@ else:
 print(f"\nSelected Threshold: {selected_threshold}")
 print(f"Selected Count: {selected_count}")
 
-# Formula: Steps = (Samples * Epochs) / Batch
+# Formula: Steps = ceil((Samples * Epochs) / Batch)
 # Epochs = 4
 # Batch = 32
-steps = int((selected_count * 4) / 32)
-print(f"Calculated SFT_STEPS: {steps}")
+TARGET_EPOCHS = 4
+EFFECTIVE_BATCH = 32
+
+steps = max(1, math.ceil((selected_count * TARGET_EPOCHS) / EFFECTIVE_BATCH))
+print(f"Calculated SFT_STEPS: {steps} (using math.ceil)")

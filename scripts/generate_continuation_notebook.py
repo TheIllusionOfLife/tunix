@@ -380,28 +380,31 @@ try:
                     if t is None or response_len <= t:
                         threshold_counts[t] += 1
         
-        print(f"Total valid continuation samples: {total_samples}")
-
-        # 2. Select Threshold
+    print(f"Total valid continuation samples: {total_samples}")
+    
+    # 2. Select Threshold
+    selected_threshold = None
+    thresholds_ordered = [10400, 12500, 15000, None]
+    
+    for t in thresholds_ordered:
+        count = threshold_counts[t]
+        ratio = count / total_samples if total_samples > 0 else 0
+        print(f"Threshold: {t} -> Kept: {count}/{total_samples} ({ratio:.2%})")
+        
+        if ratio >= 0.8:
+            selected_threshold = t
+            print(f"Selected Threshold: {selected_threshold}")
+            break
+    else:
+        print("All thresholds yielded < 80% data. Disabling length filter.")
         selected_threshold = None
-        thresholds_ordered = [10400, 12500, 15000, None]
-        
-        for t in thresholds_ordered:
-            count = threshold_counts[t]
-            ratio = count / total_samples if total_samples > 0 else 0
-            print(f"Threshold: {t} -> Kept: {count}/{total_samples} ({ratio:.2%})")
-            
-            if ratio >= 0.8:
-                selected_threshold = t
-                print(f"Selected Threshold: {selected_threshold}")
-                break
-        else:
-            print("All thresholds yielded < 80% data. Disabling length filter.")
-            selected_threshold = None
-
-        # 3. Pass 2: Loading & Formatting
-        print("Pass 2: Loading selected continuation samples...")
-        
+    
+    # 3. Pass 2: Loading & Formatting
+    print("Pass 2: Loading selected continuation samples (Streaming to JSONL)...")
+    
+    # Stream directly to JSONL file to avoid holding all strings in RAM
+    with open("continuation_data.jsonl", "w") as f:
+        import json
         for parquet_file in parquet_files:
             ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
             for sample in ds:
@@ -415,24 +418,29 @@ try:
                     
                 if prompt and response:
                     formatted = standardize_to_gemma_format(response, question=prompt)
-                    all_texts.append({"text": formatted})
-
-        print(f"Final Continuation Dataset Size: {len(all_texts)}")
-        
-        # --- Dynamic SFT Steps Calculation ---
-        # Target: ~2 epochs for continuation
-        TARGET_EPOCHS = 2
-        SFT_STEPS = int((len(all_texts) * TARGET_EPOCHS) / EFFECTIVE_BATCH)
-        print(f"Dynamic SFT Steps: {SFT_STEPS} (based on {len(all_texts)} samples, {TARGET_EPOCHS} epochs)")
-
-    else:
-        print(f"WARNING: No parquet files found in {CONTINUATION_DATA_PATH}")
+                    f.write(json.dumps({"text": formatted}) + "\\n")
     
-    print(f"Total continuation samples: {len(all_texts)}")
+    # Load using memory-mapped Arrow dataset
+    print("Loading dataset from JSONL (Memory Safe)...")
+    sft_dataset = datasets.load_dataset("json", data_files="continuation_data.jsonl", split="train")
+    dataset_size = len(sft_dataset)
+    print(f"Final Continuation Dataset Size: {dataset_size}")
     
-    # Create HuggingFace dataset
-    sft_dataset = datasets.Dataset.from_list(all_texts)
-    sft_dataset = sft_dataset.shuffle(seed=42)
+    # --- Dynamic SFT Steps Calculation ---
+    # Target: ~2 epochs for continuation
+    # SAFETY: Use math.ceil and max(1, ...)
+    import math
+    TARGET_EPOCHS = 2
+    SFT_STEPS = max(1, math.ceil((dataset_size * TARGET_EPOCHS) / EFFECTIVE_BATCH))
+    print(f"Dynamic SFT Steps: {SFT_STEPS} (based on {dataset_size} samples, {TARGET_EPOCHS} epochs)")
+
+else:
+    print(f"WARNING: No parquet files found in {CONTINUATION_DATA_PATH}")
+
+print(f"Total continuation samples: {dataset_size}")
+
+# Shuffle (already loaded as dataset)
+sft_dataset = sft_dataset.shuffle(seed=42)
     
     # Show sample
     print(f"\\nSample: {sft_dataset[0]['text'][:500]}...")
