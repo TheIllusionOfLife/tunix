@@ -440,17 +440,18 @@ try:
 
     else:
         print(f"WARNING: No parquet files found in {CONTINUATION_DATA_PATH}")
-        # Default fallback to prevent crash if files missing (though user should fix data)
+        # Default fallback to prevent crash if files missing
         dataset_size = 0
         SFT_STEPS = 100 
+        # Create empty dummy dataset to prevent NameError downstream
+        sft_dataset = datasets.Dataset.from_dict({"text": []})
     
     print(f"Total continuation samples: {dataset_size}")
     
-    # Shuffle (already loaded as dataset)
-    sft_dataset = sft_dataset.shuffle(seed=42)
-        
-    # Show sample
-    print(f"\\nSample: {sft_dataset[0]['text'][:500]}...")
+    # Shuffle & Show Sample (Only if data exists)
+    if dataset_size > 0:
+        sft_dataset = sft_dataset.shuffle(seed=42)
+        print(f"\\nSample: {sft_dataset[0]['text'][:500]}...")
     
 except Exception as e:
     print(f"CRITICAL: Failed to load continuation data: {e}")

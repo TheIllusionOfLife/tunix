@@ -46,7 +46,7 @@ The competition FAQ explicitly states that "verifiable tasks (math/coding) will 
 | Base Model | Gemma 2B-IT |
 | Method | LoRA (rank=64, alpha=64) |
 | Dataset | GlaiveAI 180K |
-| Steps | ~22,500 |
+| Steps | ~4 epochs (Dynamic steps) |
 | Learning Rate | 2e-5 |
 | Batch Size | 32 (effective) |
 | Max Seq Length | 2048 |
