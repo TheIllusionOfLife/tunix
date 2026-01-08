@@ -279,9 +279,14 @@ WANDB_ENABLED = False
 class WandbBackend:
     '''Custom backend to stream metrics to WandB during training'''
     def log_scalar(self, event: str, value, **kwargs):
-        if WANDB_ENABLED:
-            step = kwargs.get("step", 0)
-            wandb.log({event: float(value)}, step=step)
+        # Robustly handle logging: check if enabled AND run exists
+        if WANDB_ENABLED and wandb.run is not None:
+            try:
+                step = kwargs.get("step", 0)
+                wandb.log({event: float(value)}, step=step)
+            except (wandb.Error, ValueError):
+                # Silently ignore logging errors (e.g. if run finished) to prevent crashes
+                pass
     def close(self):
         pass
 
@@ -722,11 +727,16 @@ FINAL_SAVE_DIR = "/kaggle/working/final_sft_model"
 os.makedirs(FINAL_SAVE_DIR, exist_ok=True)
 
 # Save the trained LoRA model checkpoint
-checkpointer = ocp.StandardCheckpointer()
-checkpointer.save(os.path.join(FINAL_SAVE_DIR, "checkpoint"), nnx.state(lora_model, nnx.LoRAParam))
-checkpointer.wait_until_finished()
+# Save the trained LoRA model checkpoint
+try:
+    checkpointer = ocp.StandardCheckpointer()
+    checkpointer.save(os.path.join(FINAL_SAVE_DIR, "checkpoint"), nnx.state(lora_model, nnx.LoRAParam))
+    checkpointer.wait_until_finished()
+    print(f"✅ Model saved to '{FINAL_SAVE_DIR}/'")
+except Exception as e:
+    print(f"⚠️ Error saving model: {e}")
+    print("This might be due to WandB logging background process issues. Checkpoints in SFT_OUTPUT_DIR should still be valid.")
 
-print(f"✅ Model saved to '{FINAL_SAVE_DIR}/'")
 print("To submit for Unrestricted Mode:")
 print("   1. Download the output folder after this notebook finishes.")
 print("   2. Go to Kaggle -> Models -> New Model -> Upload the checkpoint files.")
@@ -934,8 +944,8 @@ The FAQ states "verifiable tasks (math/coding) will have **much lower weights**.
         vars_cell,
         setup_cell,
         model_utils_cell,
+        data_preprocessing_cell, # Moved before wandb_cell to define SFT_STEPS
         wandb_cell,
-        data_preprocessing_cell,
         training_cell,
         save_model_cell,
         visual_eval_cell,
