@@ -133,9 +133,14 @@ WANDB_ENABLED = False
 class WandbBackend:
     '''Custom backend to stream metrics to WandB during training'''
     def log_scalar(self, event: str, value, **kwargs):
-        if WANDB_ENABLED:
-            step = kwargs.get("step", 0)
-            wandb.log({event: float(value)}, step=step)
+        # Robustly handle logging: check if enabled AND run exists
+        if WANDB_ENABLED and wandb.run is not None:
+            try:
+                step = kwargs.get("step", 0)
+                wandb.log({event: float(value)}, step=step)
+            except (wandb.Error, ValueError):
+                # Silently ignore logging errors (e.g. if run finished) to prevent crashes
+                pass
     def close(self):
         pass
 
@@ -668,11 +673,14 @@ except Exception as e:
 FINAL_SAVE_DIR = "/kaggle/working/final_continuation_model"
 os.makedirs(FINAL_SAVE_DIR, exist_ok=True)
 
-checkpointer = ocp.StandardCheckpointer()
-checkpointer.save(os.path.join(FINAL_SAVE_DIR, "checkpoint"), nnx.state(lora_model, nnx.LoRAParam))
-checkpointer.wait_until_finished()
-
-print(f"✅ Model saved to {FINAL_SAVE_DIR}")
+try:
+    checkpointer = ocp.StandardCheckpointer()
+    checkpointer.save(os.path.join(FINAL_SAVE_DIR, "checkpoint"), nnx.state(lora_model, nnx.LoRAParam))
+    checkpointer.wait_until_finished()
+    print(f"✅ Model saved to {FINAL_SAVE_DIR}")
+except Exception as e:
+    print(f"⚠️ Error saving model: {e}")
+    print("This might be due to WandB logging background process issues. Checkpoints in SFT_OUTPUT_DIR should still be valid.")
 print("1. Download output.")
 print("2. Upload as Kaggle Model.")
 print("3. Update Unrestricted Model ID.")
@@ -684,10 +692,10 @@ unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-sft-unrestricted"
         title_cell,
         config_cell,
         setup_cell,
-        wandb_cell,
         model_utils_cell,
         load_ckpt_cell,
-        data_cell,
+        data_cell, # Moved before wandb_cell to define SFT_STEPS
+        wandb_cell,
         train_cell,
         visual_eval_cell,
         save_cell
