@@ -384,9 +384,10 @@ try:
                 
                 for sample in ds:
                     response_len = len(sample.get("response", ""))
+                    total_samples += 1 # Count ALL samples for correct ratio
+                    
                     if response_len < 50: continue # Always skip short/empty
                     
-                    total_samples += 1
                     for t in threshold_counts:
                         if t is None or response_len <= t:
                             threshold_counts[t] += 1
@@ -451,7 +452,10 @@ except Exception as e:
     
     count = 0
     limit = 180000 
+    count = 0
+    limit = 180000 
     FALLBACK_THRESHOLD = 15000
+    print(f"Adaptive filtering skipped in fallback mode. Using fixed safe threshold: {FALLBACK_THRESHOLD} chars.")
     
     # Stream fallback to JSONL as well
     with open("sft_data.jsonl", "w") as f:

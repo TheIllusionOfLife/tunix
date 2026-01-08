@@ -373,9 +373,10 @@ try:
             
             for sample in ds:
                 response_len = len(sample.get("response", ""))
+                total_samples += 1 # Count ALL samples for ratio
+                
                 if response_len < 50: continue
                 
-                total_samples += 1
                 for t in threshold_counts:
                     if t is None or response_len <= t:
                         threshold_counts[t] += 1

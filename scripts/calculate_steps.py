@@ -19,9 +19,10 @@ for pf in parquet_files:
     ds = datasets.load_dataset("parquet", data_files=pf, split="train") # Local load is usually fine, but consistency is good
     for sample in ds:
         length = len(sample.get("response", ""))
+        total_samples += 1 # Count ALL samples
+        
         if length < 50: continue
         
-        total_samples += 1
         for t in threshold_counts:
             if t is None or length <= t:
                 threshold_counts[t] += 1
