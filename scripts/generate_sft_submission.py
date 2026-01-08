@@ -196,7 +196,8 @@ DATASET_PATH = "/kaggle/input/tunix-sft-data"
 SFT_OUTPUT_DIR = "/kaggle/working/sft_checkpoint"
 
 # Tuning Hyperparams - Adjust these for HP tuning
-SFT_STEPS = 22500  # ~4 epochs with 180K samples (adaptive filtered), effective batch 32
+# SFT_STEPS is now calculated dynamically based on dataset size
+# SFT_STEPS = 22500 (Removed)
 TRAIN_BATCH_SIZE = 8 # Per-step batch size across all 8 TPU chips (1 sample/chip)
 GRADIENT_ACCUMULATION = 4  # Effective batch = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION
 EFFECTIVE_BATCH = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION  # 32
@@ -370,51 +371,63 @@ try:
         parquet_files = glob.glob(f"{DATASET_PATH}/*.parquet")
         
         if parquet_files:
-            # 1. Load all raw samples first
-            raw_samples = []
+            # 1. Pass 1: Counting (No Memory Load)
+            print("Pass 1: Scanning dataset for adaptive filtering...")
+            total_samples = 0
+            threshold_counts = {t: 0 for t in [10400, 12500, 15000]}
+            threshold_counts[None] = 0 # No filter
+
             for parquet_file in parquet_files:
                 ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
-                print(f"Loaded {len(ds)} samples from {os.path.basename(parquet_file)}")
-                # Convert to list of keys we need to save memory
-                for sample in ds:
-                    raw_samples.append({
-                        "prompt": sample.get("prompt", ""),
-                        "response": sample.get("response", "")
-                    })
-            
-            total_samples = len(raw_samples)
-            print(f"Total raw samples: {total_samples}")
-            
-            # 2. Adaptive Filtering Logic
-            # Thresholds: 10.4k -> 12.5k -> 15k -> None
-            thresholds = [10400, 12500, 15000, None]
-            selected_samples = []
-            
-            for threshold in thresholds:
-                temp_samples = []
-                for sample in raw_samples:
-                    response = sample["response"]
-                    if len(response) < 50: continue # Always filter empty/short
-                    
-                    if threshold is None or len(response) <= threshold:
-                        temp_samples.append(sample)
+                print(f"Scanning {os.path.basename(parquet_file)} ({len(ds)} samples)...")
                 
-                ratio = len(temp_samples) / total_samples if total_samples > 0 else 0
-                print(f"Threshold: {threshold} -> Kept: {len(temp_samples)}/{total_samples} ({ratio:.2%})")
+                for sample in ds:
+                    response_len = len(sample.get("response", ""))
+                    if response_len < 50: continue # Always skip short/empty
+                    
+                    total_samples += 1
+                    for t in threshold_counts:
+                        if t is None or response_len <= t:
+                            threshold_counts[t] += 1
+            
+            print(f"Total valid length samples: {total_samples}")
+
+            # 2. Select Threshold
+            selected_threshold = None
+            thresholds_ordered = [10400, 12500, 15000, None]
+            
+            for t in thresholds_ordered:
+                count = threshold_counts[t]
+                ratio = count / total_samples if total_samples > 0 else 0
+                print(f"Threshold: {t} -> Kept: {count}/{total_samples} ({ratio:.2%})")
                 
                 if ratio >= 0.8:
-                    print(f"Selected Threshold: {threshold}")
-                    selected_samples = temp_samples
+                    selected_threshold = t
+                    print(f"Selected Threshold: {selected_threshold}")
                     break
             else:
-                # If loop finishes without break (all ratios < 0.8), use the last result (None threshold)
                 print("All thresholds yielded < 80% data. Disabling length filter.")
-                selected_samples = temp_samples
+                selected_threshold = None
 
-            # 3. Format
-            for sample in selected_samples:
-                formatted = standardize_glaive_format(sample["prompt"], sample["response"])
-                all_texts.append({"text": formatted})
+            # 3. Pass 2: Loading & Formatting (Memory Safe)
+            print("Pass 2: Loading and formatting selected samples...")
+            all_texts = []
+            
+            for parquet_file in parquet_files:
+                ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
+                for sample in ds:
+                    prompt = sample.get("prompt", "")
+                    response = sample.get("response", "")
+                    
+                    # Apply selected filter
+                    if len(response) < 50: continue
+                    if selected_threshold is not None and len(response) > selected_threshold:
+                        continue
+                        
+                    formatted = standardize_glaive_format(prompt, response)
+                    all_texts.append({"text": formatted})
+            
+            print(f"Final Dataset Size: {len(all_texts)}")
                 
         else:
             raise FileNotFoundError("No parquet files found")
@@ -430,8 +443,6 @@ except Exception as e:
     
     count = 0
     limit = 180000 
-    
-    # Use a relaxed safe threshold for fallback
     FALLBACK_THRESHOLD = 15000
     
     for sample in ds:
@@ -447,6 +458,13 @@ except Exception as e:
         count += 1
         if count % 10000 == 0:
             print(f"  Downloaded {count} samples...")
+
+# --- Dynamic SFT Steps Calculation ---
+# Target: ~4 epochs
+TARGET_EPOCHS = 4
+SFT_STEPS = int((len(all_texts) * TARGET_EPOCHS) / EFFECTIVE_BATCH)
+print(f"Dynamic SFT Steps: {SFT_STEPS} (based on {len(all_texts)} samples, 4 epochs, effective batch {EFFECTIVE_BATCH})")
+
         
         if count >= limit:
             break

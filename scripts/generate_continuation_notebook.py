@@ -37,7 +37,9 @@ CONTINUATION_DATA_PATH = "/kaggle/input/tunix-sft-continuation-data"
 # Note: Adaptive filtering (10.4k->15k) is applied during loading to ensure >80% retention.
 
 # Training Hyperparams - Adjust for HP tuning
-SFT_STEPS = 5000  # ~1.6 epochs with 100K fresh GlaiveAI samples
+# Training Hyperparams - Adjust for HP tuning
+# SFT_STEPS is now dynamic
+# SFT_STEPS = 5000 (Removed)
 LEARNING_RATE = 5e-6  # Lower LR for continuation (try: 1e-5, 5e-6, 2e-6)
 WARMUP_STEPS = 100  # Warmup steps
 TRAIN_BATCH_SIZE = 2
@@ -354,54 +356,77 @@ def standardize_to_gemma_format(text, question=None):
 
 # Load parquet files from continuation dataset
 try:
-    for parquet_file in glob.glob(f"{CONTINUATION_DATA_PATH}/*.parquet"):
-        ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
-        print(f"Loaded {len(ds)} samples from {parquet_file}")
-        
-        # 1. Load raw samples
-        raw_samples = []
-        for sample in ds:
-            raw_samples.append({
-                "prompt": sample.get("prompt", ""),
-                "response": sample.get("response", "")
-            })
-            
-        total_samples = len(raw_samples)
-        print(f"Total raw continuation samples: {total_samples}")
+# Load parquet files from continuation dataset
+try:
+    parquet_files = glob.glob(f"{CONTINUATION_DATA_PATH}/*.parquet")
+    
+    if parquet_files:
+        # 1. Pass 1: Counting (No Memory Load)
+        print("Pass 1: Scanning continuation dataset...")
+        total_samples = 0
+        threshold_counts = {t: 0 for t in [10400, 12500, 15000]}
+        threshold_counts[None] = 0 # No filter
 
-        # 2. Adaptive Filtering Logic
-        # Thresholds: 10.4k -> 12.5k -> 15k -> None
-        thresholds = [10400, 12500, 15000, None]
-        selected_samples = []
-        
-        for threshold in thresholds:
-            temp_samples = []
-            for sample in raw_samples:
-                response = sample["response"]
-                if len(response) < 50: continue # Always filter empty/short
-                
-                if threshold is None or len(response) <= threshold:
-                    temp_samples.append(sample)
+        for parquet_file in parquet_files:
+            ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
+            print(f"Scanning {os.path.basename(parquet_file)} ({len(ds)} samples)...")
             
-            ratio = len(temp_samples) / total_samples if total_samples > 0 else 0
-            print(f"Threshold: {threshold} -> Kept: {len(temp_samples)}/{total_samples} ({ratio:.2%})")
+            for sample in ds:
+                response_len = len(sample.get("response", ""))
+                if response_len < 50: continue
+                
+                total_samples += 1
+                for t in threshold_counts:
+                    if t is None or response_len <= t:
+                        threshold_counts[t] += 1
+        
+        print(f"Total valid continuation samples: {total_samples}")
+
+        # 2. Select Threshold
+        selected_threshold = None
+        thresholds_ordered = [10400, 12500, 15000, None]
+        
+        for t in thresholds_ordered:
+            count = threshold_counts[t]
+            ratio = count / total_samples if total_samples > 0 else 0
+            print(f"Threshold: {t} -> Kept: {count}/{total_samples} ({ratio:.2%})")
             
             if ratio >= 0.8:
-                print(f"Selected Threshold: {threshold}")
-                selected_samples = temp_samples
+                selected_threshold = t
+                print(f"Selected Threshold: {selected_threshold}")
                 break
         else:
             print("All thresholds yielded < 80% data. Disabling length filter.")
-            selected_samples = temp_samples
+            selected_threshold = None
 
-        # 3. Format and append
-        for sample in selected_samples:
-            q = sample["prompt"]
-            a = sample["response"]
-            
-            if q and a:
-                formatted = standardize_to_gemma_format(a, question=q)
-                all_texts.append({"text": formatted})
+        # 3. Pass 2: Loading & Formatting
+        print("Pass 2: Loading selected continuation samples...")
+        
+        for parquet_file in parquet_files:
+            ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
+            for sample in ds:
+                prompt = sample.get("prompt", "")
+                response = sample.get("response", "")
+                
+                # Apply filter
+                if len(response) < 50: continue
+                if selected_threshold is not None and len(response) > selected_threshold:
+                    continue
+                    
+                if prompt and response:
+                    formatted = standardize_to_gemma_format(response, question=prompt)
+                    all_texts.append({"text": formatted})
+
+        print(f"Final Continuation Dataset Size: {len(all_texts)}")
+        
+        # --- Dynamic SFT Steps Calculation ---
+        # Target: ~2 epochs for continuation
+        TARGET_EPOCHS = 2
+        SFT_STEPS = int((len(all_texts) * TARGET_EPOCHS) / EFFECTIVE_BATCH)
+        print(f"Dynamic SFT Steps: {SFT_STEPS} (based on {len(all_texts)} samples, {TARGET_EPOCHS} epochs)")
+
+    else:
+        print(f"WARNING: No parquet files found in {CONTINUATION_DATA_PATH}")
     
     print(f"Total continuation samples: {len(all_texts)}")
     
