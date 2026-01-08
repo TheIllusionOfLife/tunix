@@ -27,7 +27,7 @@ for pf in parquet_files:
             if t is None or length <= t:
                 threshold_counts[t] += 1
 
-print(f"Total valid samples: {total_samples}")
+print(f"Total samples scanned: {total_samples}")
 
 selected_count = 0
 selected_threshold = 0

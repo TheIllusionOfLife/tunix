@@ -356,8 +356,6 @@ def standardize_to_gemma_format(text, question=None):
 
 # Load parquet files from continuation dataset
 try:
-# Load parquet files from continuation dataset
-try:
     parquet_files = glob.glob(f"{CONTINUATION_DATA_PATH}/*.parquet")
     
     if parquet_files:
@@ -381,7 +379,7 @@ try:
                     if t is None or response_len <= t:
                         threshold_counts[t] += 1
         
-    print(f"Total valid continuation samples: {total_samples}")
+    print(f"Total samples scanned: {total_samples}")
     
     # 2. Select Threshold
     selected_threshold = None
@@ -427,22 +425,27 @@ try:
     dataset_size = len(sft_dataset)
     print(f"Final Continuation Dataset Size: {dataset_size}")
     
-    # --- Dynamic SFT Steps Calculation ---
-    # Target: ~2 epochs for continuation
-    # SAFETY: Use math.ceil and max(1, ...)
-    import math
-    TARGET_EPOCHS = 2
-    SFT_STEPS = max(1, math.ceil((dataset_size * TARGET_EPOCHS) / EFFECTIVE_BATCH))
-    print(f"Dynamic SFT Steps: {SFT_STEPS} (based on {dataset_size} samples, {TARGET_EPOCHS} epochs)")
-
-else:
-    print(f"WARNING: No parquet files found in {CONTINUATION_DATA_PATH}")
-
-print(f"Total continuation samples: {dataset_size}")
-
-# Shuffle (already loaded as dataset)
-sft_dataset = sft_dataset.shuffle(seed=42)
+    # Reduce disk pressure
+    if os.path.exists("continuation_data.jsonl"):
+        os.remove("continuation_data.jsonl")
+        print("Removed temporary continuation_data.jsonl")
     
+        # --- Dynamic SFT Steps Calculation ---
+        # Target: ~2 epochs for continuation
+        # SAFETY: Use math.ceil and max(1, ...)
+        import math
+        TARGET_EPOCHS = 2
+        SFT_STEPS = max(1, math.ceil((dataset_size * TARGET_EPOCHS) / EFFECTIVE_BATCH))
+        print(f"Dynamic SFT Steps: {SFT_STEPS} (based on {dataset_size} samples, {TARGET_EPOCHS} epochs)")
+
+    else:
+        print(f"WARNING: No parquet files found in {CONTINUATION_DATA_PATH}")
+    
+    print(f"Total continuation samples: {dataset_size}")
+    
+    # Shuffle (already loaded as dataset)
+    sft_dataset = sft_dataset.shuffle(seed=42)
+        
     # Show sample
     print(f"\\nSample: {sft_dataset[0]['text'][:500]}...")
     

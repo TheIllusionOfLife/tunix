@@ -40,7 +40,7 @@ SFT_CONFIG = {
     "gradient_accumulation": 4,   # Effective batch = 32
     "max_seq_length": 2048,
     "warmup_steps": 200,
-    "steps": 22500,               # 180K × 4 epochs
+    "steps": "Dynamic",           # Target: 4 epochs
 }
 ```
 

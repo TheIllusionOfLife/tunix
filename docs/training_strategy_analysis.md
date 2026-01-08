@@ -1,7 +1,7 @@
 # Training Strategy Analysis: GlaiveAI-Only (180K × 4 Epochs)
 
 **Decision Date**: 2026-01-07 (Updated)
-**Final Strategy**: GlaiveAI-only, 180K samples, 4 epochs (~22,500 steps)
+**Final Strategy**: GlaiveAI-only, ~180K samples, 4 epochs (Dynamic steps)
 
 ---
 
@@ -45,7 +45,7 @@ After analyzing training runs and dataset quality, we concluded that **GlaiveAI-
 |---------|-------|
 | Dataset | GlaiveAI 180K |
 | Epochs | 4 |
-| Steps | ~22,500 |
+| Steps | Dynamic (~21,400) |
 | Effective Batch | 32 |
 | Estimated Time | ~7 hours |
 
@@ -92,6 +92,6 @@ Buffer: ~67 min (~1.1 hours) ✓
 ## 7. Action Items
 
 - [ ] Create `glaiveai_180k.parquet`
-- [ ] Update notebook to GlaiveAI-only
-- [ ] Set `SFT_STEPS = 22500`
+- [x] Update notebook to GlaiveAI-only
+- [x] Set Dynamic Steps (Target 4 epochs)
 - [ ] Upload to Kaggle and run training

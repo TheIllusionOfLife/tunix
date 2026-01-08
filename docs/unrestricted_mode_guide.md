@@ -19,13 +19,13 @@ This guide explains how to extend training across multiple sessions for the 15 b
 
 | File | Samples | Source |
 |:---|---:|:---|
-| `glaiveai_180k.parquet` | 180,000 | `train[:180000]` |
+| `glaiveai_90k_part*.parquet` | ~180,000 | `train[:180000]` |
 
 ### Dataset 2: `tunix-sft-continuation-data` (Unrestricted)
 
 | File | Samples | Source |
 |:---|---:|:---|
-| `glaiveai_continuation_100k.parquet` | 100,000 | `train[180000:280000]` |
+| `glaiveai_continuation_*.parquet` | ~100,000 | `train[180000:280000]` |
 
 > **Important**: Continuation data does NOT overlap with session 1.
 
@@ -36,7 +36,7 @@ This guide explains how to extend training across multiple sessions for the 15 b
 **Notebook**: `tunix_sft_train.ipynb`
 
 1. Attach Kaggle dataset: `tunix-sft-data`
-2. Run SFT training (180K samples, ~22,500 steps, ~7 hours)
+2. Run SFT training (Target: 4 epochs, dynamic steps)
 3. Save checkpoint to output
 4. Upload output as Kaggle Dataset: `tunix-session1-checkpoint`
 

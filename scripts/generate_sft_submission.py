@@ -392,7 +392,7 @@ try:
                         if t is None or response_len <= t:
                             threshold_counts[t] += 1
             
-            print(f"Total valid length samples: {total_samples}")
+            print(f"Total samples scanned: {total_samples}")
 
             # 2. Select Threshold
             selected_threshold = None
@@ -437,6 +437,11 @@ try:
             sft_dataset = datasets.load_dataset("json", data_files="sft_data.jsonl", split="train")
             dataset_size = len(sft_dataset)
             print(f"Final Dataset Size: {dataset_size}")
+            
+            # Reduce disk pressure
+            if os.path.exists("sft_data.jsonl"):
+                os.remove("sft_data.jsonl")
+                print("Removed temporary sft_data.jsonl")
                 
         else:
             raise FileNotFoundError("No parquet files found")
@@ -450,8 +455,6 @@ except Exception as e:
     # Fallback: Stream from HuggingFace
     ds = datasets.load_dataset("glaiveai/reasoning-v1-20m", split="train", streaming=True)
     
-    count = 0
-    limit = 180000 
     count = 0
     limit = 180000 
     FALLBACK_THRESHOLD = 15000
@@ -479,6 +482,10 @@ except Exception as e:
     
     sft_dataset = datasets.load_dataset("json", data_files="sft_data.jsonl", split="train")
     dataset_size = len(sft_dataset)
+    
+    if os.path.exists("sft_data.jsonl"):
+        os.remove("sft_data.jsonl")
+        print("Removed temporary sft_data.jsonl")
 
 # --- Dynamic SFT Steps Calculation ---
 # Target: ~4 epochs

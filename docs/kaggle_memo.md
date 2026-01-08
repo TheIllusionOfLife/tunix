@@ -5,13 +5,14 @@
 ### Kaggle Dataset: `tunix-sft-data`
 
 Upload from `data/`:
-- `glaiveai_180k.parquet` (180K samples)
+- `glaiveai_90k_part1.parquet`
+- `glaiveai_90k_part2.parquet`
 
 ### Data Source
 
 | Dataset | Samples | Slice |
 |---------|---------|-------|
-| GlaiveAI | 180,000 | `train[:180000]` |
+| GlaiveAI | ~180,000 | Split Parquet Files |
 
 ---
 
@@ -38,7 +39,7 @@ Notebook will:
 1. Install Tunix and dependencies
 2. Load GlaiveAI parquet file
 3. Initialize Gemma 2B-IT with LoRA
-4. Run SFT for ~22,500 steps (~7 hours)
+4. Run SFT for dynamic steps (Target: 4 epochs)
 5. Save final checkpoint
 
 ---

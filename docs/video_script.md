@@ -44,7 +44,7 @@
 ## 1:15 - 2:00 | The Code (45 seconds)
 
 **[SCREEN ACTIONS]**
-- 1:15-1:30: Open notebook, scroll to config section showing SFT_STEPS=22500 (15s)
+- 1:15-1:30: Open notebook, scroll to config section showing Dynamic Steps calculation (15s)
 - 1:30-1:45: Scroll to data loading, pause on format standardization function (15s)
 - 1:45-2:00: Scroll to training loop, show progress bar or WandB loss chart (15s)
 
@@ -55,7 +55,7 @@
 > 
 > Each sample follows: question, reasoning trace, then answer.
 > 
-> 180K samples over 4 epochs - that's 22,500 training steps in about 7 hours on a single TPU.
+> 180K samples over 4 epochs - steps are calculated dynamically to fit exactly.
 > 
 > The model learns to generate thinking first, then the conclusion."
 
