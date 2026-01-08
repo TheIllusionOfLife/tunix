@@ -79,6 +79,7 @@ def is_connected():
         return False
 
 if is_connected():
+    !pip install -q -U chex==0.1.90
     !pip install "google-tunix[prod]==0.1.5"
     !pip install git+https://github.com/google/qwix
 else:
@@ -88,7 +89,7 @@ else:
 # Fix Flax Version
 !pip uninstall -q -y flax
 !pip install flax==0.12.0
-!pip install -q datasets==3.2.0 optax==0.2.4 chex>=0.1.90
+!pip install -q datasets==3.2.0 optax==0.2.4
 
 # --- Imports ---
 import functools
@@ -184,7 +185,7 @@ def get_gemma_model(ckpt_path):
     mesh = jax.make_mesh(*MESH)
     model_config = gemma_lib.ModelConfig.gemma2_2b()
     abs_gemma: nnx.Module = nnx.eval_shape(
-        lambda: gemma_lib.Gemma(model_config, rngs=nnx.Rngs(params=0))
+        lambda: gemma_lib.Transformer(model_config, rngs=nnx.Rngs(params=0))
     )
     abs_state = nnx.state(abs_gemma)
     abs_state = jax.tree.map(
@@ -241,7 +242,7 @@ INTERMEDIATE_CKPT_DIR = "/tmp/content/intermediate_ckpt/"
 if not os.path.exists(INTERMEDIATE_CKPT_DIR):
     print("Converting base model checkpoint...")
     params = params_lib.load_and_format_params(os.path.join(kaggle_ckpt_path, "gemma2-2b-it"))
-    gemma = gemma_lib.Gemma.from_params(params, version="2-2b-it")
+    gemma = gemma_lib.Transformer.from_params(params, version="2-2b-it")
     checkpointer = ocp.StandardCheckpointer()
     _, state = nnx.split(gemma)
     checkpointer.save(os.path.join(INTERMEDIATE_CKPT_DIR, "state"), state)
