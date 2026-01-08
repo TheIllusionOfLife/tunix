@@ -379,57 +379,57 @@ try:
                     if t is None or response_len <= t:
                         threshold_counts[t] += 1
         
-    print(f"Total samples scanned: {total_samples}")
-    
-    # 2. Select Threshold
-    selected_threshold = None
-    thresholds_ordered = [10400, 12500, 15000, None]
-    
-    for t in thresholds_ordered:
-        count = threshold_counts[t]
-        ratio = count / total_samples if total_samples > 0 else 0
-        print(f"Threshold: {t} -> Kept: {count}/{total_samples} ({ratio:.2%})")
+        print(f"Total samples scanned: {total_samples}")
         
-        if ratio >= 0.8:
-            selected_threshold = t
-            print(f"Selected Threshold: {selected_threshold}")
-            break
-    else:
-        print("All thresholds yielded < 80% data. Disabling length filter.")
+        # 2. Select Threshold
         selected_threshold = None
-    
-    # 3. Pass 2: Loading & Formatting
-    print("Pass 2: Loading selected continuation samples (Streaming to JSONL)...")
-    
-    # Stream directly to JSONL file to avoid holding all strings in RAM
-    with open("continuation_data.jsonl", "w") as f:
-        import json
-        for parquet_file in parquet_files:
-            ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
-            for sample in ds:
-                prompt = sample.get("prompt", "")
-                response = sample.get("response", "")
-                
-                # Apply filter
-                if len(response) < 50: continue
-                if selected_threshold is not None and len(response) > selected_threshold:
-                    continue
+        thresholds_ordered = [10400, 12500, 15000, None]
+        
+        for t in thresholds_ordered:
+            count = threshold_counts[t]
+            ratio = count / total_samples if total_samples > 0 else 0
+            print(f"Threshold: {t} -> Kept: {count}/{total_samples} ({ratio:.2%})")
+            
+            if ratio >= 0.8:
+                selected_threshold = t
+                print(f"Selected Threshold: {selected_threshold}")
+                break
+        else:
+            print("All thresholds yielded < 80% data. Disabling length filter.")
+            selected_threshold = None
+        
+        # 3. Pass 2: Loading & Formatting
+        print("Pass 2: Loading selected continuation samples (Streaming to JSONL)...")
+        
+        # Stream directly to JSONL file to avoid holding all strings in RAM
+        with open("continuation_data.jsonl", "w") as f:
+            import json
+            for parquet_file in parquet_files:
+                ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
+                for sample in ds:
+                    prompt = sample.get("prompt", "")
+                    response = sample.get("response", "")
                     
-                if prompt and response:
-                    formatted = standardize_to_gemma_format(response, question=prompt)
-                    f.write(json.dumps({"text": formatted}) + "\\n")
-    
-    # Load using memory-mapped Arrow dataset
-    print("Loading dataset from JSONL (Memory Safe)...")
-    sft_dataset = datasets.load_dataset("json", data_files="continuation_data.jsonl", split="train")
-    dataset_size = len(sft_dataset)
-    print(f"Final Continuation Dataset Size: {dataset_size}")
-    
-    # Reduce disk pressure
-    if os.path.exists("continuation_data.jsonl"):
-        os.remove("continuation_data.jsonl")
-        print("Removed temporary continuation_data.jsonl")
-    
+                    # Apply filter
+                    if len(response) < 50: continue
+                    if selected_threshold is not None and len(response) > selected_threshold:
+                        continue
+                        
+                    if prompt and response:
+                        formatted = standardize_to_gemma_format(response, question=prompt)
+                        f.write(json.dumps({"text": formatted}) + "\\n")
+        
+        # Load using memory-mapped Arrow dataset
+        print("Loading dataset from JSONL (Memory Safe)...")
+        sft_dataset = datasets.load_dataset("json", data_files="continuation_data.jsonl", split="train")
+        dataset_size = len(sft_dataset)
+        print(f"Final Continuation Dataset Size: {dataset_size}")
+        
+        # Reduce disk pressure
+        if os.path.exists("continuation_data.jsonl"):
+            os.remove("continuation_data.jsonl")
+            print("Removed temporary continuation_data.jsonl")
+        
         # --- Dynamic SFT Steps Calculation ---
         # Target: ~2 epochs for continuation
         # SAFETY: Use math.ceil and max(1, ...)
@@ -440,6 +440,9 @@ try:
 
     else:
         print(f"WARNING: No parquet files found in {CONTINUATION_DATA_PATH}")
+        # Default fallback to prevent crash if files missing (though user should fix data)
+        dataset_size = 0
+        SFT_STEPS = 100 
     
     print(f"Total continuation samples: {dataset_size}")
     

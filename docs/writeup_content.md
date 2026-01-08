@@ -31,8 +31,7 @@ Instead of teaching the model to explore, we teach it to imitate high-quality th
 3. **LoRA Training**: Low-rank adaptation enables efficient fine-tuning within the 9-hour constraint while achieving strong results.
 
 4. **Training Configuration**:
-   - 180K samples × 4 epochs
-   - ~22,500 training steps
+   - **SFT**: ~180k samples, 4 epochs (Dynamic steps)
    - ~7 hours runtime
 
 ### Why This Works

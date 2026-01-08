@@ -60,7 +60,7 @@ Training estimate:
 ├── Setup + data loading: ~10 min
 ├── Model loading: ~5 min
 ├── Baseline eval: ~5 min
-├── Training (22,500 steps): ~428 min (~7.1 hours)
+├── Training (Dynamic steps): ~428 min (~7.1 hours)
 ├── Post-training eval: ~10 min
 ├── WandB extended eval: ~10 min
 ├── Checkpoint save: ~5 min

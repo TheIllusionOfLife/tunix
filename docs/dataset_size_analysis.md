@@ -18,7 +18,8 @@ This is a classic overfitting failure caused by a **dataset collapse** due to ov
 
 **Bad run (new):**
 - `Final SFT dataset: 1786 samples`
-- `Starting Training for 22500 steps`
+- `> **Historical Note**: References to "22500 steps" below reflect early fixed-step planning. We now use dynamic steps.
+> Starting Training for ~22500 steps...`
 - `Format Validation: 7/10 passed`
   (`logs/2026-01-08-10-29-00.log`)
 

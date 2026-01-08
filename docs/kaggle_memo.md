@@ -48,7 +48,7 @@ Notebook will:
 
 Before submitting:
 - [ ] Run `python scripts/smoke_test_notebook.py` (must PASS)
-- [ ] Verify `glaiveai_180k.parquet` is in Kaggle dataset
+- [ ] Verify dataset files are in Kaggle dataset
 - [ ] Check DATA_SOURCES.md is included
 - [ ] Test on CPU runtime first (quick syntax check)
 
