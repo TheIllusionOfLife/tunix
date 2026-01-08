@@ -567,8 +567,12 @@ train_iter = create_data_iterator(sft_dataset, TRAIN_BATCH_SIZE, tokenizer)
 print(f"Starting Continuation Training for {SFT_STEPS} steps...")
 print(f"Learning Rate Peak: {LEARNING_RATE}")
 
-with mesh:
-    trainer.train(train_ds=train_iter, skip_jit=False)
+# Prevent hang if fallback dataset is empty
+if sft_dataset is not None and len(sft_dataset) > 0:
+    with mesh:
+        trainer.train(train_ds=train_iter, skip_jit=False)
+else:
+    print("⚠️ Dataset is empty. Skipping training loop to prevent iterator hang.")
 
 print("Continuation Training Complete.")
 """)

@@ -48,7 +48,7 @@ From FAQ #6:
 | Dataset | Samples | Notes |
 |:---|:---:|:---|
 | GlaiveAI | 180,000 | Primary dataset |
-| **Total** | **180K** | 4 epochs = ~22,500 steps |
+| **Total** | **180K** | 4 epochs (Dynamic steps) |
 
 ---
 
