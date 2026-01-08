@@ -41,11 +41,10 @@ Competition FAQ explicitly states that verifiable tasks (math/coding) have "much
 ## 🗺️ Workflow Diagram
 ```mermaid
 graph LR
-    A[Gemma-2B-IT] --> B{SFT Training}
-    B --> C[GlaiveAI 180K]
-    C --> D["Format: <reasoning>/<answer>"]
-    D --> E[Trained Model]
-    E --> F[Submission]
+    A[Gemma-2-2b-it] --> C[Tunix SFT Training]
+    B[GlaiveAI 180K Dataset] --> C
+    C --> D[Trained Model]
+    D --> E[Submission]
 ```
 """)
 
@@ -63,7 +62,14 @@ We use a **single high-quality dataset** from GlaiveAI, chosen for alignment wit
 - 2025 model quality (DeepSeek-R1-Distill-70B)
 - Focus on creative, analytical, and social science domains
 - Competition deprioritizes math/code (FAQ: "much lower weights")
-- Consistent format = easier standardization
+
+**Adaptive Filtering:**
+To prevent dataset collapse from aggressive length filtering, we use an adaptive threshold strategy:
+1. Try 95th percentile (10.4k chars).
+2. If <80% data retained, relax to 12.5k chars.
+3. If still <80%, relax to 15k chars.
+4. As a last resort, disable filtering.
+This ensures we train on a representative >80% of the dataset logic.
 
 Dataset is split into two parquet files (90K each) to prevent OOM on Kaggle.
 """)
@@ -125,7 +131,8 @@ def is_connected():
     return False
 
 if is_connected():
-    !pip install "google-tunix[prod]==0.1.5"
+    !pip install -q -U google-tunix[prod]==0.1.5 chex>=0.1.90 distrax==0.1.7 optax==0.2.6 listsafe
+    !pip install -q -U wandb
     !pip install git+https://github.com/google/qwix
 else:
     print("Offline mode detected. Assuming dependencies are installed or wheels provided.")
@@ -189,7 +196,7 @@ DATASET_PATH = "/kaggle/input/tunix-sft-data"
 SFT_OUTPUT_DIR = "/kaggle/working/sft_checkpoint"
 
 # Tuning Hyperparams - Adjust these for HP tuning
-SFT_STEPS = 22500  # ~4 epochs with 180K samples, effective batch 32
+SFT_STEPS = 22500  # ~4 epochs with 180K samples (adaptive filtered), effective batch 32
 TRAIN_BATCH_SIZE = 8 # Per-step batch size across all 8 TPU chips (1 sample/chip)
 GRADIENT_ACCUMULATION = 4  # Effective batch = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION
 EFFECTIVE_BATCH = TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION  # 32
@@ -363,42 +370,77 @@ try:
         parquet_files = glob.glob(f"{DATASET_PATH}/*.parquet")
         
         if parquet_files:
+            # 1. Load all raw samples first
+            raw_samples = []
             for parquet_file in parquet_files:
                 ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
                 print(f"Loaded {len(ds)} samples from {os.path.basename(parquet_file)}")
-                
+                # Convert to list of keys we need to save memory
                 for sample in ds:
-                    prompt = sample.get("prompt", "")
-                    response = sample.get("response", "")
+                    raw_samples.append({
+                        "prompt": sample.get("prompt", ""),
+                        "response": sample.get("response", "")
+                    })
+            
+            total_samples = len(raw_samples)
+            print(f"Total raw samples: {total_samples}")
+            
+            # 2. Adaptive Filtering Logic
+            # Thresholds: 10.4k -> 12.5k -> 15k -> None
+            thresholds = [10400, 12500, 15000, None]
+            selected_samples = []
+            
+            for threshold in thresholds:
+                temp_samples = []
+                for sample in raw_samples:
+                    response = sample["response"]
+                    if len(response) < 50: continue # Always filter empty/short
                     
-                    # Filter: Skip very long outputs (>4000 chars ~1K tokens) or empty
-                    if len(response) > 4000 or len(response) < 50:
-                        continue
-                    
-                    formatted = standardize_glaive_format(prompt, response)
-                    all_texts.append({"text": formatted})
+                    if threshold is None or len(response) <= threshold:
+                        temp_samples.append(sample)
+                
+                ratio = len(temp_samples) / total_samples if total_samples > 0 else 0
+                print(f"Threshold: {threshold} -> Kept: {len(temp_samples)}/{total_samples} ({ratio:.2%})")
+                
+                if ratio >= 0.8:
+                    print(f"Selected Threshold: {threshold}")
+                    selected_samples = temp_samples
+                    break
+            else:
+                # If loop finishes without break (all ratios < 0.8), use the last result (None threshold)
+                print("All thresholds yielded < 80% data. Disabling length filter.")
+                selected_samples = temp_samples
+
+            # 3. Format
+            for sample in selected_samples:
+                formatted = standardize_glaive_format(sample["prompt"], sample["response"])
+                all_texts.append({"text": formatted})
+                
         else:
             raise FileNotFoundError("No parquet files found")
     else:
         raise FileNotFoundError(f"Dataset path {DATASET_PATH} not found")
 
 except Exception as e:
-    print(f"Kaggle dataset not found, downloading from HuggingFace...")
+    print(f"Kaggle dataset not found ({e}), downloading from HuggingFace...")
     print(f"Warning: This may be slow. Pre-download recommended.")
     
     # Fallback: Stream from HuggingFace
     ds = datasets.load_dataset("glaiveai/reasoning-v1-20m", split="train", streaming=True)
     
     count = 0
-    limit = 180000  # Match our target
+    limit = 180000 
+    
+    # Use a relaxed safe threshold for fallback
+    FALLBACK_THRESHOLD = 15000
     
     for sample in ds:
         prompt = sample.get("prompt", "")
         response = sample.get("response", "")
         
-        if len(response) > 4000 or len(response) < 50:
+        if len(response) > FALLBACK_THRESHOLD or len(response) < 50:
             continue
-            
+        
         formatted = standardize_glaive_format(prompt, response)
         all_texts.append({"text": formatted})
         
@@ -789,6 +831,12 @@ try:
             })
             print(f"Extended Evaluation: {extended_valid}/{len(WANDB_EVAL_PROMPTS)} ({format_compliance:.1f}%) passed.")
             print("Logged to WandB: eval_results table + summary metrics.")
+            
+            # Force sync before exit/crash
+            wandb.finish()
+            import time
+            time.sleep(5)  # Give the background process a moment to finalize
+            
     except Exception as w_err:
         print(f"Extended WandB eval skipped: {w_err}")
 

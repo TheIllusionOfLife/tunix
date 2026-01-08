@@ -34,6 +34,7 @@ PREV_CHECKPOINT_PATH = "/kaggle/input/tunix-session1-checkpoint/final_sft_model/
 
 # Path to continuation training data (Fresh GlaiveAI samples)
 CONTINUATION_DATA_PATH = "/kaggle/input/tunix-sft-continuation-data"
+# Note: Adaptive filtering (10.4k->15k) is applied during loading to ensure >80% retention.
 
 # Training Hyperparams - Adjust for HP tuning
 SFT_STEPS = 5000  # ~1.6 epochs with 100K fresh GlaiveAI samples
@@ -85,7 +86,7 @@ else:
 # Fix Flax Version
 !pip uninstall -q -y flax
 !pip install flax==0.12.0
-!pip install -q datasets==3.2.0 optax==0.2.4 chex==0.1.88
+!pip install -q datasets==3.2.0 optax==0.2.4 chex>=0.1.90
 
 # --- Imports ---
 import functools
@@ -357,9 +358,46 @@ try:
         ds = datasets.load_dataset("parquet", data_files=parquet_file, split="train")
         print(f"Loaded {len(ds)} samples from {parquet_file}")
         
+        # 1. Load raw samples
+        raw_samples = []
         for sample in ds:
-            q = sample.get("prompt", "")
-            a = sample.get("response", "")
+            raw_samples.append({
+                "prompt": sample.get("prompt", ""),
+                "response": sample.get("response", "")
+            })
+            
+        total_samples = len(raw_samples)
+        print(f"Total raw continuation samples: {total_samples}")
+
+        # 2. Adaptive Filtering Logic
+        # Thresholds: 10.4k -> 12.5k -> 15k -> None
+        thresholds = [10400, 12500, 15000, None]
+        selected_samples = []
+        
+        for threshold in thresholds:
+            temp_samples = []
+            for sample in raw_samples:
+                response = sample["response"]
+                if len(response) < 50: continue # Always filter empty/short
+                
+                if threshold is None or len(response) <= threshold:
+                    temp_samples.append(sample)
+            
+            ratio = len(temp_samples) / total_samples if total_samples > 0 else 0
+            print(f"Threshold: {threshold} -> Kept: {len(temp_samples)}/{total_samples} ({ratio:.2%})")
+            
+            if ratio >= 0.8:
+                print(f"Selected Threshold: {threshold}")
+                selected_samples = temp_samples
+                break
+        else:
+            print("All thresholds yielded < 80% data. Disabling length filter.")
+            selected_samples = temp_samples
+
+        # 3. Format and append
+        for sample in selected_samples:
+            q = sample["prompt"]
+            a = sample["response"]
             
             if q and a:
                 formatted = standardize_to_gemma_format(a, question=q)
@@ -560,7 +598,19 @@ try:
             wandb.log({"eval_results": tbl})
             print("Logged results to WandB.")
     except Exception as w_err:
-        print(f"WandB logging skipped: {w_err}")
+        print(f"Post-training WandB logging failed: {w_err}")
+    
+    # Force sync before exit
+    print("Syncing WandB...")
+    try:
+        if 'wandb' in locals() and wandb.run is not None:
+             wandb.finish()
+    except:
+        pass
+    
+    import time
+    time.sleep(5)
+    print("Done.")
 
 except Exception as e:
     print(f"Evaluation failed: {e}")
