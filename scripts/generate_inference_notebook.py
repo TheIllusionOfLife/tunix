@@ -97,10 +97,10 @@ ALPHA = 64.0
 MAX_SEQ_LEN = 2048
 
 # Inference Params
-INFERENCE_TEMPERATURE = 0.7
-INFERENCE_TOP_K = 50
-INFERENCE_TOP_P = 0.95
-EVAL_MAX_TOKENS = 1024
+INFERENCE_TEMPERATURE = 0.0 # Greedy decoding as per competition check
+INFERENCE_TOP_K = 1
+INFERENCE_TOP_P = 1.0
+EVAL_MAX_TOKENS = 2048
 """)
 
     # --- Cell 3: Model Utils ---
@@ -299,36 +299,49 @@ inference_sampler = sampler_lib.Sampler(
     ),
 )
 
-out_data = inference_sampler(
-    input_strings=formatted_prompts,
-    max_generation_steps=EVAL_MAX_TOKENS,
-    temperature=INFERENCE_TEMPERATURE,
-    top_k=INFERENCE_TOP_K,
-    top_p=INFERENCE_TOP_P,
-    echo=False
-)
-
-print("--- Results & Validation ---")
+print("--- Results & Validation (Greedy Decoding) ---")
 valid_format_count = 0
 
-for p, o in zip(prompts, out_data.text):
-    print(f"Prompt: {p}")
-    print(f"Output: {o}")
+# Process sequentially to avoid OOM with large context
+for i, p in enumerate(prompts):
+    print(f"\\nProcessing Prompt {i+1}/{len(prompts)}...")
+    formatted_prompt = TEMPLATE.format(question=p)
     
-    # --- Format Validation ---
-    has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
-    has_answer = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
+    # Run single inference
+    try:
+        out_data = inference_sampler(
+            input_strings=[formatted_prompt],
+            max_generation_steps=EVAL_MAX_TOKENS,
+            temperature=INFERENCE_TEMPERATURE,
+            top_k=INFERENCE_TOP_K,
+            top_p=INFERENCE_TOP_P,
+            echo=False
+        )
+        output_text = out_data.text[0]
+        
+        print(f"Prompt: {p}")
+        print(f"Output: {output_text}")
+        
+        # --- Format Validation ---
+        has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", output_text, re.DOTALL))
+        has_answer = bool(re.search(r"<answer>.*?</answer>", output_text, re.DOTALL))
+        
+        is_valid = has_reasoning and has_answer
+        if is_valid:
+            valid_format_count += 1
+            print("✅ Format Check: Passed")
+        else:
+            print(f"❌ Format Check: Failed (Reasoning: {has_reasoning}, Answer: {has_answer})")
+            
+        print("-" * 50)
+        
+    except Exception as e:
+        print(f"❌ Error generating response for prompt {i+1}: {e}")
     
-    is_valid = has_reasoning and has_answer
-    if is_valid:
-        valid_format_count += 1
-        print("✅ Format Check: Passed (<reasoning> + <answer> detected)")
-    else:
-        print(f"❌ Format Check: Failed (Reasoning: {has_reasoning}, Answer: {has_answer})")
-    
-    print("-" * 50)
+    # Explicit Clean-up
+    gc.collect() # Force garbage collection to prevent OOM
 
-print(f"\nFinal Score: {valid_format_count}/{len(prompts)} ({valid_format_count/len(prompts)*100:.1f}%) formatted correctly.")
+print(f"\\nFinal Score: {valid_format_count}/{len(prompts)} ({valid_format_count/len(prompts)*100:.1f}%) formatted correctly.")
 print("Note: 'Baseline' models typically score 0% on this check as they lack the reasoning structure.")
 
 """)
