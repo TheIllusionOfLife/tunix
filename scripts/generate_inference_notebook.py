@@ -236,8 +236,8 @@ try:
     print("---------------------------")
 
     # Smart Path Detection
-    # Orbax/Tunix might save under 'default', 'params', 'state', or directly in the step dir
-    potential_subdirs = ["default", "params", "state", "."]
+    # Orbax/Tunix might save under 'default', 'params', 'state', 'model_params', or directly in the step dir
+    potential_subdirs = ["default", "params", "state", "model_params", "."]
     
     checkpoint_path = None
     
