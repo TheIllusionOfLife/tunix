@@ -299,6 +299,8 @@ tokenizer = tokenizer_lib.Tokenizer(
 import glob
 import re
 
+SYSTEM_PROMPT = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
+
 print(f"Loading continuation data from {CONTINUATION_DATA_PATH}...")
 
 all_texts = []
@@ -607,7 +609,9 @@ try:
         "Solve this math problem step-by-step: If 2x + 5 = 15, what is x?"
     ]
     
-    formatted_prompts = [TEMPLATE.format(question=p) for p in test_prompts]
+    # Competition-Compliant Prompt Template
+    PROMPT_TEMPLATE = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{{question}}<end_of_turn>\\n<start_of_turn>model"
+    formatted_prompts = [PROMPT_TEMPLATE.format(question=p) for p in test_prompts]
     
     out_data = inference_sampler(
         input_strings=formatted_prompts,

@@ -335,6 +335,8 @@ except Exception as e:
 
 print("Loading GlaiveAI dataset...")
 
+SYSTEM_PROMPT = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
+
 def standardize_glaive_format(prompt, response):
     '''Convert GlaiveAI <think> format to <reasoning>/<answer> tags'''
     
@@ -785,7 +787,10 @@ try:
     
     # Use same prompts as baseline for fair comparison
     test_prompts = EVAL_PROMPTS
-    formatted_prompts = [TEMPLATE.format(question=p) for p in test_prompts]
+    
+    # Competition-Compliant Prompt Template
+    PROMPT_TEMPLATE = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{{question}}<end_of_turn>\\n<start_of_turn>model"
+    formatted_prompts = [PROMPT_TEMPLATE.format(question=p) for p in test_prompts]
     
     out_data = inference_sampler(
         input_strings=formatted_prompts,
