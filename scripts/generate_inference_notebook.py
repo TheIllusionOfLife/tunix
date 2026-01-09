@@ -308,11 +308,29 @@ out_data = inference_sampler(
     echo=False
 )
 
-print("--- Results ---")
+print("--- Results & Validation ---")
+valid_format_count = 0
+
 for p, o in zip(prompts, out_data.text):
     print(f"Prompt: {p}")
-    print(f"Output: {o}\\n")
+    print(f"Output: {o}")
+    
+    # --- Format Validation ---
+    has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
+    has_answer = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
+    
+    is_valid = has_reasoning and has_answer
+    if is_valid:
+        valid_format_count += 1
+        print("✅ Format Check: Passed (<reasoning> + <answer> detected)")
+    else:
+        print(f"❌ Format Check: Failed (Reasoning: {has_reasoning}, Answer: {has_answer})")
+    
     print("-" * 50)
+
+print(f"\nFinal Score: {valid_format_count}/{len(prompts)} ({valid_format_count/len(prompts)*100:.1f}%) formatted correctly.")
+print("Note: 'Baseline' models typically score 0% on this check as they lack the reasoning structure.")
+
 """)
 
     nb.cells = [
