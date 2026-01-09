@@ -83,7 +83,7 @@ Dataset is split into two parquet files (90K each) to prevent OOM on Kaggle.
 TEMPERATURE=0.7
 TOP_K=50
 TOP_P=0.9
-MAX_GENERATION_STEPS=1024  # Aligned with EVAL_MAX_TOKENS
+MAX_GENERATION_STEPS=2048  # Aligned with EVAL_MAX_TOKENS
 
 # Output Tags
 REASONING_START = "<reasoning>"
@@ -871,7 +871,7 @@ try:
             
             for batch_start in range(0, len(WANDB_EVAL_PROMPTS), BATCH_SIZE):
                 batch_prompts = WANDB_EVAL_PROMPTS[batch_start:batch_start + BATCH_SIZE]
-                batch_formatted = [TEMPLATE.format(question=p) for p in batch_prompts]
+                batch_formatted = [PROMPT_TEMPLATE.format(question=p) for p in batch_prompts]
                 batch_out = inference_sampler(
                     input_strings=batch_formatted,
                     max_generation_steps=EVAL_MAX_TOKENS,

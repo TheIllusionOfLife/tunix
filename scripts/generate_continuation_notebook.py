@@ -657,9 +657,6 @@ try:
         # Explicit Clean-up
         gc.collect()
         print("-" * 50)
-            
-        results_for_wandb.append([p, o, is_valid])
-        print("-" * 50)
     
     print(f"Format Validation: {valid_format_count}/{len(test_prompts)} passed.")
     
