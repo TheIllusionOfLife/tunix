@@ -1,7 +1,7 @@
 # Kaggle Competition Writeup
 
 ## Title
-**Tunix Zero-Cost: Teaching Reasoning Through Demonstration**
+**Tunix: Teach Reasoning Through Demonstration**
 
 ## Subtitle
 *High-quality SFT on 180K reasoning traces from DeepSeek-R1-Distill-70B*

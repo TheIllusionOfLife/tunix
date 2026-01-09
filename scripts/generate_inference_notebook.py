@@ -280,16 +280,39 @@ np.random.seed(SEED)
 print(f"Random seed set to {SEED}")
 
 prompts = [
+    # --- Creative writing ---
     "Write a short story about a robot learning to paint.",
     "Write a haiku about artificial intelligence.",
+    "Write a sonnet about the intersection of nature and technology.", 
+
+    # --- Creative ideation ---
     "Propose three innovative uses for AI in education.",
+    "Suggest 3 unique features for a smart home device for elderly people.",
+
+    # --- Summarization ---
     "Summarize the key benefits and risks of renewable energy in 3 paragraphs.",
+    "Summarize the allegory of the cave by Plato.",
+
+    # --- Math ---
     "Solve step-by-step: If 2x + 5 = 15, what is x?",
+    "If a train travels 60 miles per hour, how long will it take to travel 150 miles?",
+
+    # --- Coding ---
     "Write a Python function to check if a string is a palindrome.",
-    "Explain why the sky is blue to a 5-year-old.",
+    "Fix this Python code: def add(a, b): return a * b",
+    "Extract all email addresses from this text: Contact us at support@example.com or sales@example.org for more info.",
+
+    # --- Basic science ---
     "Explain the process of photosynthesis step by step.",
+    "Explain why the sky is blue to a 5-year-old.",
+    "Explain the concept of entropy in simple terms.",
+
+    # --- Other ---
     "What are the ethical implications of AI in healthcare?",
     "Should AI systems have rights? Argue both sides.",
+    "A farmer has a wolf, a goat, and a cabbage. He needs to cross a river with a boat that fits only him and one other item. The wolf eats the goat if left alone, and the goat eats the cabbage. How does he cross?",
+    "Describe how to make a perfect omelet steps.",
+    "Analyze the primary causes of the fall of the Roman Empire."
 ]
 
 # --- Competition-Compliant Prompt Template ---
@@ -385,7 +408,43 @@ print(f"\\nFinal Score: {score}/{len(prompts)} ({score/len(prompts)*100:.1f}%) f
         model_utils_cell,
         load_base_cell,
         load_adapter_cell,
-        eval_cell
+        eval_cell,
+        
+        # --- Cell 7: Experimental Concise Eval ---
+        nbf.v4.new_markdown_cell("## 🧪 Experiment: Concise Prompting\\nTesting if a stricter system prompt reduces verbosity without losing reasoning quality."),
+        nbf.v4.new_code_cell("""
+# --- Experimental Concise System Prompt ---
+# User proposed strict constraints on length and meta-talk.
+
+PROMPT_TEMPLATE_CONCISE = \"\"\"<start_of_turn>user
+You are a careful assistant. Respond in TWO parts only:
+
+<reasoning>
+Give a concise, high‑signal reasoning trace. Keep it under 6 sentences.
+No meta‑planning, no “I should…”, no self‑talk.
+If the task is code, reason in 2–4 sentences max about the approach.
+</reasoning>
+
+<answer>
+Give the final answer only.
+If code is requested, return only the code block with proper indentation.
+If a child‑friendly answer is requested, use simple words and 1–2 short paragraphs.
+</answer>
+
+{question}<end_of_turn>
+<start_of_turn>model
+\"\"\"
+
+print("\\n" + "="*50)
+print("🧪 RUNNING CONCISE PROMPT EXPERIMENT")
+print("="*50)
+
+# Re-use the same judge and sampler, just different template
+# Uses the 'prompts' list defined in the previous cell (20 Total)
+concise_score = judge.evaluate(inference_sampler, PROMPT_TEMPLATE_CONCISE, prompts)
+
+print(f"\\n🧪 Concise Experiment Score: {concise_score}/{len(prompts)} ({concise_score/len(prompts)*100:.1f}%) formatted correctly.")
+""")
     ]
 
     with open('tunix_inference_eval.ipynb', 'w') as f:
