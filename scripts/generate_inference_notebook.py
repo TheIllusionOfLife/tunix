@@ -100,9 +100,10 @@ MAX_SEQ_LEN = 2048
 INFERENCE_TEMPERATURE = 0.0 # Greedy decoding as per competition check
 INFERENCE_TOP_K = 1
 INFERENCE_TOP_P = None
-EVAL_MAX_TOKENS = 2048
+MAX_PROMPT_LENGTH = 1024
+MAX_GENERATION_STEPS = 2048
 SEED = 42
-""")
+""");
 
     # --- Cell 3: Model Utils ---
     model_utils_cell = nbf.v4.new_code_cell("""
@@ -165,7 +166,7 @@ def restore_lora_checkpoint(lora_model, checkpoint_path):
     nnx.update(lora_model, restored_state)
     print("LoRA weights restored.")
     return lora_model
-""")
+""");
 
     # --- Cell 4: Load Base Model ---
     load_base_cell = nbf.v4.new_code_cell("""
@@ -200,7 +201,7 @@ lora_model = get_lora_model(base_model, mesh=mesh)
 tokenizer = tokenizer_lib.Tokenizer(
     tokenizer_path=os.path.join(kaggle_ckpt_path, "tokenizer.model")
 )
-""")
+""");
 
     # --- Cell 5: Load Adapter ---
     # Robust loading logic here
@@ -265,12 +266,15 @@ except Exception as e:
     print(f"CRITICAL: Failed to load checkpoint: {e}")
     # Raise error to STOP execution. Do not continue to inference with random weights.
     raise e
-""")
+""");
 
     # --- Cell 6: Run Eval ---
     eval_cell = nbf.v4.new_code_cell("""
 # --- 3. Run Inference ---
-print("Running Evaluation...")
+print("Running Evaluation (Strict Template Mode)...")
+
+# --- Competition-Compliant Prompt Template ---
+PROMPT_TEMPLATE = "<start_of_turn>user\\nYou are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags.\\n\\n{question}<end_of_turn>\\n<start_of_turn>model"
 
 prompts = [
     "Write a short story about a robot learning to paint.",
@@ -285,67 +289,82 @@ prompts = [
     "Should AI systems have rights? Argue both sides.",
 ]
 
-SYSTEM_PROMPT = "You are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags."
-TEMPLATE = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{{question}}<end_of_turn>\\n<start_of_turn>model"
-formatted_prompts = [TEMPLATE.format(question=p) for p in prompts]
-
+print(f"Initializing Sampler with MAX_GENERATION_STEPS={MAX_GENERATION_STEPS}...")
 inference_sampler = sampler_lib.Sampler(
     transformer=lora_model,
     tokenizer=tokenizer,
     cache_config=sampler_lib.CacheConfig(
-        cache_size=MAX_SEQ_LEN + 512,
+        cache_size=MAX_PROMPT_LENGTH + MAX_GENERATION_STEPS + 256, # Formula from template
         num_layers=model_config.num_layers,
         num_kv_heads=model_config.num_kv_heads,
         head_dim=model_config.head_dim,
     ),
 )
 
-print("--- Results & Validation (Greedy Decoding) ---")
-valid_format_count = 0
+# --- Judge Class (Mimicking Template Structure) ---
+class TunixHackathonJudge:
+    def __init__(self, temperature, top_k, top_p, max_steps, seed):
+        self.temperature = temperature
+        self.top_k = top_k
+        self.top_p = top_p
+        self.max_steps = max_steps
+        self.seed = seed
 
-# Process sequentially to avoid OOM with large context
-for i, p in enumerate(prompts):
-    print(f"\\nProcessing Prompt {i+1}/{len(prompts)}...")
-    formatted_prompt = TEMPLATE.format(question=p)
-    
-    # Run single inference
-    try:
-        out_data = inference_sampler(
-            input_strings=[formatted_prompt],
-            max_generation_steps=EVAL_MAX_TOKENS,
-            temperature=INFERENCE_TEMPERATURE,
-            top_k=INFERENCE_TOP_K,
-            top_p=INFERENCE_TOP_P,
-            echo=False
-        )
-        output_text = out_data.text[0]
+    def evaluate(self, sampler, prompt_template, questions):
+        valid_count = 0
+        print("--- Results & Validation (Greedy Decoding) ---")
         
-        print(f"Prompt: {p}")
-        print(f"Output: {output_text}")
-        
-        # --- Format Validation ---
-        has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", output_text, re.DOTALL))
-        has_answer = bool(re.search(r"<answer>.*?</answer>", output_text, re.DOTALL))
-        
-        is_valid = has_reasoning and has_answer
-        if is_valid:
-            valid_format_count += 1
-            print("✅ Format Check: Passed")
-        else:
-            print(f"❌ Format Check: Failed (Reasoning: {has_reasoning}, Answer: {has_answer})")
+        for i, question in enumerate(questions):
+            print(f"\\nProcessing Prompt {i+1}/{len(questions)}...")
+            formatted_prompt = prompt_template.format(question=question)
             
-        print("-" * 50)
-        
-    except Exception as e:
-        print(f"❌ Error generating response for prompt {i+1}: {e}")
-    
-    # Explicit Clean-up
-    gc.collect() # Force garbage collection to prevent OOM
+            try:
+                # Run Inference
+                out_data = sampler(
+                    input_strings=[formatted_prompt],
+                    max_generation_steps=self.max_steps,
+                    temperature=self.temperature,
+                    top_k=self.top_k,
+                    top_p=self.top_p,
+                    echo=False
+                )
+                output_text = out_data.text[0]
+                
+                print(f"Prompt: {question}")
+                print(f"Output: {output_text}")
+                
+                # --- Format Validation ---
+                has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", output_text, re.DOTALL))
+                has_answer = bool(re.search(r"<answer>.*?</answer>", output_text, re.DOTALL))
+                
+                if has_reasoning and has_answer:
+                    valid_count += 1
+                    print("✅ Format Check: Passed")
+                else:
+                    print(f"❌ Format Check: Failed (Reasoning: {has_reasoning}, Answer: {has_answer})")
+                print("-" * 50)
+                
+            except Exception as e:
+                 print(f"❌ Error generating response for prompt {i+1}: {e}")
+            
+            # Memory Cleanup
+            gc.collect()
+            
+        return valid_count
 
-print(f"\\nFinal Score: {valid_format_count}/{len(prompts)} ({valid_format_count/len(prompts)*100:.1f}%) formatted correctly.")
-print("Note: 'Baseline' models typically score 0% on this check as they lack the reasoning structure.")
+# --- Run the Judge ---
+judge = TunixHackathonJudge(
+    temperature=INFERENCE_TEMPERATURE,
+    top_k=INFERENCE_TOP_K,
+    top_p=INFERENCE_TOP_P,
+    max_steps=MAX_GENERATION_STEPS,
+    seed=SEED
+)
 
-""")
+score = judge.evaluate(inference_sampler, PROMPT_TEMPLATE, prompts)
+
+print(f"\\nFinal Score: {score}/{len(prompts)} ({score/len(prompts)*100:.1f}%) formatted correctly.")
+""");
 
     nb.cells = [
         title_cell,
