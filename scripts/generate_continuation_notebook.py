@@ -591,17 +591,7 @@ print("Continuation Training Complete.")
 print("Running Post-Training Evaluation...")
 
 try:
-    inference_sampler = sampler_lib.Sampler(
-        transformer=lora_model,
-        tokenizer=tokenizer,
-        cache_config=sampler_lib.CacheConfig(
-            cache_size=MAX_SEQ_LEN + 512,
-            num_layers=model_config.num_layers,
-            num_kv_heads=model_config.num_kv_heads,
-            head_dim=model_config.head_dim,
-        ),
-    )
-
+    # 1. Define Prompts & Template First (for dynamic cache sizing)
     test_prompts = [
         "What are the ethical implications of AI in healthcare?",
         "Write a short story about a robot learning to paint.",
@@ -612,6 +602,24 @@ try:
     # Competition-Compliant Prompt Template
     PROMPT_TEMPLATE = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{{question}}<end_of_turn>\\n<start_of_turn>model"
     formatted_prompts = [PROMPT_TEMPLATE.format(question=p) for p in test_prompts]
+
+    # 2. Dynamic Cache Resizing (Strict Template Match)
+    MAX_GENERATION_STEPS = 2048
+    prompt_lengths = [len(tokenizer.encode(p)) for p in formatted_prompts]
+    MAX_PROMPT_LENGTH = max(prompt_lengths)
+    print(f"Detected Max Prompt Length: {MAX_PROMPT_LENGTH} tokens")
+    
+    # 3. Initialize Sampler using Template Formula
+    inference_sampler = sampler_lib.Sampler(
+        transformer=lora_model,
+        tokenizer=tokenizer,
+        cache_config=sampler_lib.CacheConfig(
+            cache_size=MAX_PROMPT_LENGTH + MAX_GENERATION_STEPS + 256, # Exact Template Formula
+            num_layers=model_config.num_layers,
+            num_kv_heads=model_config.num_kv_heads,
+            head_dim=model_config.head_dim,
+        ),
+    )
     
     # Sequential Processing (Strict Greedy Decoding)
     print("--- Post-Training Outputs ---")
@@ -626,7 +634,7 @@ try:
             # Run single inference
             out_data = inference_sampler(
                 input_strings=[formatted_prompt],
-                max_generation_steps=2048, # Strict limit
+                max_generation_steps=MAX_GENERATION_STEPS, # Strict limit
                 temperature=0.0, # Greedy
                 top_k=1,
                 top_p=None,

@@ -754,16 +754,7 @@ unrestricted_kaggle_model = "yuyamukai/tunix-gemma2-sft"
 print("Running Post-Training Evaluation...")
 
 try:
-    inference_sampler = sampler_lib.Sampler(
-        transformer=lora_model,
-        tokenizer=tokenizer,
-        cache_config=sampler_lib.CacheConfig(
-            cache_size=MAX_SEQ_LEN + 512,
-            num_layers=model_config.num_layers,
-            num_kv_heads=model_config.num_kv_heads,
-            head_dim=model_config.head_dim,
-        ),
-    )
+    
 
     test_prompts = [
         # Creative writing
@@ -792,6 +783,24 @@ try:
     PROMPT_TEMPLATE = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{{question}}<end_of_turn>\\n<start_of_turn>model"
     formatted_prompts = [PROMPT_TEMPLATE.format(question=p) for p in test_prompts]
     
+    # 2. Dynamic Cache Resizing (Strict Template Match)
+    # MAX_GENERATION_STEPS is defined in config (should be 2048)
+    prompt_lengths = [len(tokenizer.encode(p)) for p in formatted_prompts]
+    MAX_PROMPT_LENGTH = max(prompt_lengths)
+    print(f"Detected Max Prompt Length: {MAX_PROMPT_LENGTH} tokens")
+    
+    # 3. Initialize Sampler using Template Formula
+    inference_sampler = sampler_lib.Sampler(
+        transformer=lora_model,
+        tokenizer=tokenizer,
+        cache_config=sampler_lib.CacheConfig(
+            cache_size=MAX_PROMPT_LENGTH + MAX_GENERATION_STEPS + 256, # Exact Template Formula
+            num_layers=model_config.num_layers,
+            num_kv_heads=model_config.num_kv_heads,
+            head_dim=model_config.head_dim,
+        ),
+    )
+
     print("--- Post-Training Outputs ---")
     valid_format_count = 0
     results_for_wandb = []
