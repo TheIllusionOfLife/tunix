@@ -814,7 +814,7 @@ try:
             # Run single inference
             out_data = inference_sampler(
                 input_strings=[formatted_prompt],
-                max_generation_steps=EVAL_MAX_TOKENS,
+                max_generation_steps=MAX_GENERATION_STEPS,
                 temperature=INFERENCE_TEMPERATURE,
                 top_k=INFERENCE_TOP_K,
                 top_p=INFERENCE_TOP_P,
@@ -883,7 +883,7 @@ try:
                 batch_formatted = [PROMPT_TEMPLATE.format(question=p) for p in batch_prompts]
                 batch_out = inference_sampler(
                     input_strings=batch_formatted,
-                    max_generation_steps=EVAL_MAX_TOKENS,
+                    max_generation_steps=MAX_GENERATION_STEPS,
                     temperature=INFERENCE_TEMPERATURE,
                     top_k=INFERENCE_TOP_K,
                     top_p=INFERENCE_TOP_P,
