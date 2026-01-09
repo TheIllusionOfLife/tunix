@@ -100,7 +100,6 @@ MAX_SEQ_LEN = 2048
 INFERENCE_TEMPERATURE = 0.0 # Greedy decoding as per competition check
 INFERENCE_TOP_K = 1
 INFERENCE_TOP_P = None
-MAX_PROMPT_LENGTH = 1024
 MAX_GENERATION_STEPS = 2048
 SEED = 42
 """);
@@ -273,8 +272,12 @@ except Exception as e:
 # --- 3. Run Inference ---
 print("Running Evaluation (Strict Template Mode)...")
 
-# --- Competition-Compliant Prompt Template ---
-PROMPT_TEMPLATE = "<start_of_turn>user\\nYou are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags.\\n\\n{question}<end_of_turn>\\n<start_of_turn>model"
+# --- Set Random Seeds ---
+import random
+import numpy as np
+random.seed(SEED)
+np.random.seed(SEED)
+print(f"Random seed set to {SEED}")
 
 prompts = [
     "Write a short story about a robot learning to paint.",
@@ -288,6 +291,16 @@ prompts = [
     "What are the ethical implications of AI in healthcare?",
     "Should AI systems have rights? Argue both sides.",
 ]
+
+# --- Competition-Compliant Prompt Template ---
+PROMPT_TEMPLATE = "<start_of_turn>user\\nYou are a deep thinking AI. Think step by step about the problem and provide your reasoning between <reasoning> and </reasoning> tags. Then, provide the final answer between <answer> and </answer> tags.\\n\\n{question}<end_of_turn>\\n<start_of_turn>model"
+
+# Calculate Dynamic MAX_PROMPT_LENGTH
+print("Calculating prompt lengths for cache sizing...")
+formatted_prompts_for_sizing = [PROMPT_TEMPLATE.format(question=p) for p in prompts]
+prompt_lengths = [len(tokenizer.encode(p)) for p in formatted_prompts_for_sizing]
+MAX_PROMPT_LENGTH = max(prompt_lengths)
+print(f"Detected Max Prompt Length: {MAX_PROMPT_LENGTH} tokens")
 
 print(f"Initializing Sampler with MAX_GENERATION_STEPS={MAX_GENERATION_STEPS}...")
 inference_sampler = sampler_lib.Sampler(
