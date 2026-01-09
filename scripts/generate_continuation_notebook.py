@@ -613,33 +613,50 @@ try:
     PROMPT_TEMPLATE = f"<start_of_turn>user\\n{SYSTEM_PROMPT}\\n\\n{{question}}<end_of_turn>\\n<start_of_turn>model"
     formatted_prompts = [PROMPT_TEMPLATE.format(question=p) for p in test_prompts]
     
-    out_data = inference_sampler(
-        input_strings=formatted_prompts,
-        max_generation_steps=1024,
-        temperature=0.7,
-        top_k=50,
-        top_p=0.95,
-        echo=False
-    )
-    
-    # Validation Logic
+    # Sequential Processing (Strict Greedy Decoding)
     print("--- Post-Training Outputs ---")
     valid_format_count = 0
     results_for_wandb = []
-    
-    for p, o in zip(test_prompts, out_data.text):
-        print(f"Prompt: {p}")
-        print(f"Output: {o[:500]}...")
+
+    for i, p in enumerate(test_prompts):
+        print(f"\\nProcessing Prompt {i+1}/{len(test_prompts)}...")
+        try:
+            formatted_prompt = PROMPT_TEMPLATE.format(question=p)
+            
+            # Run single inference
+            out_data = inference_sampler(
+                input_strings=[formatted_prompt],
+                max_generation_steps=2048, # Strict limit
+                temperature=0.0, # Greedy
+                top_k=1,
+                top_p=None,
+                echo=False
+            )
+            output_text = out_data.text[0]
+            
+            print(f"Prompt: {p}")
+            print(f"Output: {output_text}")
+            
+            # Robust Regex Check
+            has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", output_text, re.DOTALL))
+            has_answer = bool(re.search(r"<answer>.*?</answer>", output_text, re.DOTALL))
+            
+            is_valid = has_reasoning and has_answer
+            if is_valid:
+                valid_format_count += 1
+                print("✅ Format Check: Passed")
+            else:
+                print(f"❌ Format Check: Failed")
+            
+            results_for_wandb.append([p, output_text, is_valid])
+            
+        except Exception as e:
+            print(f"❌ Error generating/validating prompt {i+1}: {e}")
+            results_for_wandb.append([p, f"ERROR: {e}", False])
         
-        has_reasoning = bool(re.search(r"<reasoning>.*?</reasoning>", o, re.DOTALL))
-        has_answer = bool(re.search(r"<answer>.*?</answer>", o, re.DOTALL))
-        
-        is_valid = has_reasoning and has_answer
-        if is_valid:
-            valid_format_count += 1
-            print("✅ Format Check: Passed")
-        else:
-            print(f"❌ Format Check: Failed")
+        # Explicit Clean-up
+        gc.collect()
+        print("-" * 50)
             
         results_for_wandb.append([p, o, is_valid])
         print("-" * 50)
