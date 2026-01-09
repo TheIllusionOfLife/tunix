@@ -99,8 +99,9 @@ MAX_SEQ_LEN = 2048
 # Inference Params
 INFERENCE_TEMPERATURE = 0.0 # Greedy decoding as per competition check
 INFERENCE_TOP_K = 1
-INFERENCE_TOP_P = 1.0
+INFERENCE_TOP_P = None
 EVAL_MAX_TOKENS = 2048
+SEED = 42
 """)
 
     # --- Cell 3: Model Utils ---
