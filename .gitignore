@@ -5,5 +5,4 @@ __pycache__/
 .ipynb_checkpoints/
 logs/
 data/
-.claude/
 archive/data/
