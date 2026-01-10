@@ -1,12 +1,10 @@
-# Kaggle Competition Writeup
+# Writeup for Kaggle Tunix competition
 
 ## Title
-**Tunix: Teach Reasoning Through Demonstration**
+Tunix: Teach Reasoning Through Demonstration
 
 ## Subtitle
-*High-quality SFT on 180K reasoning traces from DeepSeek-R1-Distill-70B*
-
----
+High-quality SFT on 180K reasoning traces from DeepSeek-R1-Distill-70B
 
 ## Project Description
 
@@ -58,21 +56,18 @@ The competition FAQ explicitly states that "verifiable tasks (math/coding) will 
 Our final solution is the result of a long journey through the Tunix ecosystem. We iterated through several approaches before arriving at the winning strategy.
 
 ### Phase 1: Exploration & Tutorials
-*Artifacts: `my_tunix_note.ipynb`, `grpo-demo-gemma2-2b.ipynb`*
 
 We started by exploring the Google DeepMind starter notebooks. We set up the Tunix environment on TPU v5e and successfully reproduced the GRPO pipeline on the GSM8K dataset.
 - **Goal**: Understand Tunix `GRPOLearner` and `RLCluster`.
 - **Result**: Functional pipeline, but realized that simple reproduction wouldn't win.
 
 ### Phase 2: The Hybrid SFT+GRPO Attempt
-*Artifact: `cancelled_tunix-zero-cost-train.ipynb`*
 
-We attempted to build a "Zero Cost" pipeline that chained SFT (using Magpie data) followed by GRPO (using GSM8K).
+We attempted to build a pipeline that chained SFT (using Magpie data) followed by GRPO (using GSM8K).
 - **Hypothesis**: SFT would teach the format, and GRPO would optimize the reasoning.
-- **Why it failed**: The complexities of managing two distinct training phases within the 9-hour Kaggle limit were too high. We had to mock parts of the trainer to make it fit, and ultimately **cancelled** this approach to find something more efficient.
+- **Why it failed**: The complexities of managing two distinct training phases within the 9-hour Kaggle limit were too high. We had to mock parts of the trainer to make it fit, and ultimately cancelled this approach to find something more efficient.
 
 ### Phase 3: Pure GRPO on Math/Code
-*Artifacts: `tunix_zero_cost_train.ipynb`, `tunix_continuation.ipynb`*
 
 We pivoted to a "Pure GRPO" strategy, dropping the SFT phase entirely. We reasoned that `Gemma-2B-IT` was already instruction-tuned enough.
 - **Dataset**: We combined `GSM8K` (Math) and `MBPP` (Code).
@@ -100,7 +95,7 @@ This led us to our final pivot. instead of *reinforcing* math/code (which we can
 
 ## Unrestricted Mode
 
-For the +15 bonus points, we continue training with 100K fresh samples from the same source (train[180000:280000]), using a lower learning rate (5e-6) for refinement.
+For the multi session mode, we continue training with 100K fresh samples from the same source (train[180000:280000]), using a lower learning rate (5e-6) for refinement.
 
 ---
 
@@ -109,4 +104,3 @@ For the +15 bonus points, we continue training with 100K fresh samples from the 
 - **Dataset**: glaiveai/reasoning-v1-20m
 - **License**: Apache 2.0
 - **Samples Used**: 180K (single session) + 100K (unrestricted)
-- **Reproducibility**: `python scripts/download_sft_datasets.py` creates the exact dataset
