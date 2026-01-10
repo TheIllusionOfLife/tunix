@@ -41,9 +41,9 @@ The competition FAQ explicitly states that "verifiable tasks (math/coding) will 
 
 | Parameter | Value |
 |-----------|-------|
-| Base Model | Gemma 2B-IT |
+| Base Model | gemma2-2b-it |
 | Method | LoRA (rank=64, alpha=64) |
-| Dataset | GlaiveAI 180K |
+| Dataset | 180k samples from glaiveai/reasoning-v1-20m |
 | Steps | ~4 epochs (Dynamic steps) |
 | Learning Rate | 2e-5 |
 | Batch Size | 32 (effective) |
@@ -53,7 +53,7 @@ The competition FAQ explicitly states that "verifiable tasks (math/coding) will 
 
 ## Our Journey & Failed Experiments
 
-Our final solution is the result of a long journey through the Tunix ecosystem. We iterated through several approaches before arriving at the winning strategy.
+Our final solution is the result of a long journey through the Tunix ecosystem. We iterated through several approaches before arriving at our final strategy.
 
 ### Phase 1: Exploration & Tutorials
 
@@ -69,27 +69,38 @@ We attempted to build a pipeline that chained SFT (using Magpie data) followed b
 
 ### Phase 3: Pure GRPO on Math/Code
 
-We pivoted to a "Pure GRPO" strategy, dropping the SFT phase entirely. We reasoned that `Gemma-2B-IT` was already instruction-tuned enough.
-- **Dataset**: We combined `GSM8K` (Math) and `MBPP` (Code).
+We pivoted to a "Pure GRPO" strategy, dropping the SFT phase entirely. We reasoned that `gemma2-2b-it` was already instruction-tuned enough.
+- **Dataset**: We combined `gsm8k` (Math) and `mbpp` (Code).
 - **Rewards**: Implemented custom reward functions for structure (XML tags) and correctness (`math_correctness_reward`, `code_correctness_reward`).
 - **Result**: We achieved ~99% format compliance!
 - **Critical Flaw**: We realized too late that the competition **explicitly deprioritizes math and code**. We were optimizing a model for tasks that would have "much lower weights" in the final judging.
 
-### Phase 4: The Final Pivot (SFT on GlaiveAI)
+### Phase 4: The Final Pivot (SFT on the glaiveai dataset)
 *Current Solution*
 
 This led us to our final pivot. instead of *reinforcing* math/code (which we can verify but isn't valued), we chose to *imitate* high-quality general reasoning (which is valued but hard to verify).
 - **Shift**: From GRPO (RL) → SFT (Supervised Learning).
-- **Data**: From Math/Code → GlaiveAI (General Reasoning).
-- **Outcome**: A model that "thinks" eloquently about philosophy, art, and science—exactly what the judges want.
+- **Data**: From Math/Code → General Reasoning (glaiveai/reasoning-v1-20m 180k samples).
+- **Outcome**: A model that "thinks" eloquently about philosophy, art, and science, exactly what the judges want.
 
 ---
 
 ## Learnings
 
-1. **Read the Rules First**: We spent weeks optimizing for Math/Code (Phase 3) before noticing the FAQ deprioritized them.
-2. **Quality > Quantity**: One curated 2025 dataset (GlaiveAI) outperforms a mix of older ones.
-3. **Simplicity Wins**: Our "Cancelled" Phase 2 pipeline was too complex. The final pure SFT pipeline is robust and runs in 7 hours.
+1. **Read the Rules First (Strategic)**
+   We spent weeks optimizing for Math/Code (Phase 3) before noticing the FAQ deprioritized them. We learned that understanding the **evaluation criteria** is just as important as the model architecture.
+
+2. **Imitation > Exploration for Small Models (Architectural)**
+   We discovered that for a 2B parameter model, "Behavior Cloning" (SFT) on high-quality thoughts from a 70B teacher is far more effective than asking it to "discover" reasoning paths via RL (GRPO). The 2B model lacks the capacity to self-correct from scratch but is an excellent **student** of structured thought.
+
+3. **Structure is Scaffolding (Data)**
+   The `<reasoning>` tag isn't just XML; it's a cognitive scaffold. By forcing the model to output "Wait, I should check..." before the answer, we leverage the autoregressive nature of LLMs to condition the final answer on a "better state" of latent variables.
+
+4. **Efficiency via Abstract Initialization (Technical)**
+   Using Tunix's `nnx.eval_shape` allowed us to define the entire model and sharding layout on the TPU mesh **without allocating memory**. This "abstract initialization" was crucial for avoiding OOMs during the complex LoRA setup phases on TPU v5e.
+
+5. **Quality > Quantity (Data)**
+   One curated dataset (GlaiveAI) outperformed our mixtures of older datasets. The "freshness" and explicit reasoning style of the data mattered more than volume.
 
 ---
 
