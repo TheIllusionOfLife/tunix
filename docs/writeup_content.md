@@ -9,7 +9,7 @@ High-quality SFT on 180K reasoning traces from DeepSeek-R1-Distill-70B
 ## Project Description
 
 ### The Challenge
-Small language models like Gemma 2B often answer questions too quickly without showing their reasoning process. The traditional approach uses reinforcement learning (GRPO) on math problems, but this has limitations:
+Small language models like Gemma2 2B often answer questions too quickly without showing their reasoning process. The traditional approach uses reinforcement learning (GRPO) on math problems, but this has limitations:
 - Only ~1,500 steps possible in 9 hours
 - Focuses on math/code domains that have "much lower weights" per competition FAQ
 - Requires verifiable reward signals
@@ -22,7 +22,7 @@ Instead of teaching the model to explore, we teach it to imitate high-quality th
 
 ### Key Technical Decisions
 
-1. **Single High-Quality Dataset**: We use GlaiveAI (glaiveai/reasoning-v1-20m), which features reasoning traces from DeepSeek-R1-Distill-Llama-70B. This 2025 dataset focuses on non-math/code domains like social science and creative writing.
+1. **Single High-Quality Dataset**: We use GlaiveAI (glaiveai/reasoning-v1-20m), which features reasoning traces from DeepSeek-R1-Distill-Llama-70B. This dataset focuses on non-math/code domains like social science and creative writing.
 
 2. **Format Standardization**: All responses are converted to `<reasoning>...</reasoning>` and `<answer>...</answer>` tags, teaching the model explicit structure.
 
@@ -97,7 +97,7 @@ This led us to our final pivot. instead of *reinforcing* math/code (which we can
    The `<reasoning>` tag isn't just XML; it's a cognitive scaffold. By forcing the model to output "Wait, I should check..." before the answer, we leverage the autoregressive nature of LLMs to condition the final answer on a "better state" of latent variables.
 
 4. **Efficiency via Abstract Initialization (Technical)**
-   Using Tunix's `nnx.eval_shape` allowed us to define the entire model and sharding layout on the TPU mesh **without allocating memory**. This "abstract initialization" was crucial for avoiding OOMs during the complex LoRA setup phases on TPU v5e.
+   Using Tunix's `nnx.eval_shape` allowed us to define the entire model and sharding layout on the TPU mesh **without allocating memory**. This "abstract initialization" was crucial for avoiding OOMs during the complex LoRA setup phases on TPU v5e-8.
 
 5. **Quality > Quantity (Data)**
    One curated dataset (GlaiveAI) outperformed our mixtures of older datasets. The "freshness" and explicit reasoning style of the data mattered more than volume.

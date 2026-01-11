@@ -15,7 +15,7 @@
 **[VOICEOVER - speak at normal pace, ~40 seconds]**
 > "Hi, I'm Yuya, and this is my solution for the Google Tunix Hackathon.
 > 
-> Small models like Gemma2 2B answer too fast without thinking through problems. The usual fix is reinforcement learning on math puzzles, but verifiable problems like math and code are often not the main use cases for small models. The main use cases are often non-verifiable problems like summarization, creative ideation, or writings. In this hackathon, we're tasked to finetune a small model by using Google's lightweight LLM post-training library, Tunix, to answer better with reasoning traces, especially for non-verifiable problems."
+> Small models like Gemma2 2B answer too fast without thinking through problems. The usual fix is reinforcement learning on math puzzles, but verifiable problems like math and code are often not the main use cases for small models. The main use cases are often non-verifiable problems like summarization, creative ideation, or writings. In this hackathon, we're tasked to finetune a small model by using Google's lightweight LLM post-training library, Tunix, to answer better with reasoning traces."
 ---
 
 ## 0:40 - 1:10 | The Strategy (30 seconds)
@@ -29,45 +29,52 @@
 > The dataset, glaiveai/reasoning-v1-20m, was generated using DeepSeek-R1-Distill-Llama-70B, and it is available at HuggingFace."
 ---
 
-## 1:10 - 1:50 | The Code (40 seconds)
+## 1:10 - 1:30 | The Code 1 (20 seconds)
 
 **[SCREEN ACTIONS]**
-- 1:10-1:50: Show multiple slides which contain key code of Tunix implementation in our notebook. First slide for the first example, second slide for the second example.
-
-**[VOICEOVER - ~40 seconds]**
+- 1:10-1:30: Show a slide which contains key code of Tunix implementation in our notebook.
+```python
+def get_gemma_model(ckpt_path):
+    # Abstract shape evaluation for TPU memory efficiency
+    abs_gemma = nnx.eval_shape(
+        lambda: gemma_lib.Transformer(model_config, rngs=nnx.Rngs(params=0))
+    )
+    # Sharding across TPU mesh
+    abs_state = nnx.state(abs_gemma)
+    abs_state = jax.tree.map(
+        lambda a, s: jax.ShapeDtypeStruct(a.shape, jnp.bfloat16, sharding=s),
+        abs_state, nnx.get_named_sharding(abs_state, mesh)
+    )
+    return nnx.merge(graph_def, restored_params)
+```
+**[VOICEOVER - ~20 seconds]**
 > "Here are snippets of our code.
 > 
 > We utilize Tunix's `nnx` module for efficient model loading on TPUs. By using `eval_shape`, we initialize the model abstractly without consuming memory until sharding is defined."
 > 
-> ```python
-> def get_gemma_model(ckpt_path):
->     # Abstract shape evaluation for TPU memory efficiency
->     abs_gemma = nnx.eval_shape(
->         lambda: gemma_lib.Transformer(model_config, rngs=nnx.Rngs(params=0))
->     )
->     # Sharding across TPU mesh
->     abs_state = jax.tree.map(
->         lambda a, s: jax.ShapeDtypeStruct(a.shape, jnp.bfloat16, sharding=s),
->         nnx.state(abs_gemma), nnx.get_named_sharding(abs_state, mesh)
->     )
->     return nnx.merge(graph_def, restored_params)
-> ```
+
+
+## 1:30 - 1:50 | The Code 2 (20 seconds)
+
+**[SCREEN ACTIONS]**
+- 1:30-1:50: Show a slide which contains key code of Tunix implementation in our notebook.
+
+```python
+# Tunix PeftTrainer for TPU alignment
+trainer = peft_trainer.PeftTrainer(
+    model=lora_model,
+    optimizer=optimizer,
+    training_config=training_config
+)
+# Efficient training on the TPU mesh
+with mesh:
+    trainer.train(train_ds=train_iter, skip_jit=False)
+```
+
+
+**[VOICEOVER - ~20 seconds]**
+> "We use the `PeftTrainer` with Low-Rank Adaptation. This captures the reasoning patterns without retraining the entire 2-billion parameter model."
 > 
-> "Then, we use the `PeftTrainer` with Low-Rank Adaptation. This captures the reasoning patterns without retraining the entire 2-billion parameter model."
-> 
-> ```python
-> # Tunix PeftTrainer for TPU alignment
-> trainer = peft_trainer.PeftTrainer(
->     model=lora_model,
->     optimizer=optimizer,
->     training_config=training_config
-> )
-> 
-> # Efficient training on the TPU mesh
-> with mesh:
->     trainer.train(train_ds=train_iter, skip_jit=False)
-> ```
->
 > "We trained it for less than 7 hours on Kaggle's TPU."
 ---
 
@@ -75,18 +82,49 @@
 
 **[SCREEN ACTIONS]**
 - 1:50-2:40: Show a slide which compares the outputs of raw gemma2-2b-it model and our Tunix-trained model.
+raw model:
+"""
+A: ## Innovative Uses of AI in Education
+**Problem:** How can AI be used to improve the educational experience for students and teachers?
+**Step 1: Personalized Learning**
+* **AI can analyze student data:** AI can analyze student performance data, including grades, test scores, and learning patterns. <reasoning> This allows for a deeper understanding of individual student needs and learning styles. </reasoning>
+~~~
+**Final Answer:**
+AI has the potential to revolutionize education by providing personalized learning experiences, intelligent tutoring, and increased accessibility for all students.
+<answer>
+</answer>
+"""
+
+Our Tunix-trained model:
+"""
+<reasoning>
+Okay, so I need to come up with ...
+~~~
+Wait, I'm not sure if I'm covering all aspects. Maybe I should ...
+~~~
+</reasoning>
+<answer>
+**Innovative Uses of AI in Education**
+1. **Personalized Learning Paths with AI:**
+- **Description:** AI can analyze student performance data to create personalized learning paths, suggesting specific resources or activities to help students improve. This approach ensures that each student receives tailored support, enhancing their learning experience.
+- **Innovation:**
+~~~
+**Ethical Considerations and Technical Feasibility:**
+~~~
+</answer>
+"""
 
 **[VOICEOVER - ~50 seconds]**
-> "Let's see how the model improved. We asked both to 'Propose innovative uses for AI in education.'
+> "Let's see the results. We asked both to 'Propose three innovative uses for AI in education.'
 > 
-> The raw model's answer is mixing up the points. It places `<reasoning>` tags inside the final answer.
+> The raw model struggles. It mixes the points up and sometimes even places reasoning tags *inside* the final answer.
 > 
-> The Tunix model behaves like thinking in the `<reasoning>` block. It brainstorms, then critiques itself.
-> *'Wait, I should make sure these ideas are innovative. I also need to consider ethical implications.'*
+> The Tunix model? It pauses. In the `<reasoning>` block, it brainstorms, then explicitly *critiques itself*:
+> *'Wait, I'm not sure if I'm covering all aspects... Maybe I should...'*
 > 
-> It self-corrects *before* generating the final answer. The answer is a clean, well-structured proposal that includes an Ethics section, something the raw model completely missed.
+> It self-corrects *before* generating the final answer. The result includes a dedicated Ethics section, something the raw model missed entirely.
 > 
-> The model successfully generates a better proposal with reasoning traces.
+> We asked Gemini 3 Pro to judge the quality. It gave the Tunix model a 9 out of 10 for its structured reasoning, compared to just 4 out of 10 for the baseline."
 ---
 
 ## 2:40 - 3:00 | Outro (20 seconds)
@@ -95,8 +133,10 @@
 - 2:40-3:00: Show a slide which contains thanks note for Tunix, glaiveai, and Kaggle. The slide also contains a list of Tunix functionality, and a link to my writeup and code. No logos in the slide because they are very sensitive assets.
 
 **[VOICEOVER - ~20 seconds]**
-> We greatly appreciate the hackathon to let us explore the opportunity to apply Tunix to fine tune a small model to reason, and the glaiveai to provide the dataset to the public.
-> We haven't explored the full functionality of Tunix which provides Reinforcement Learning, Preference Fine-tuning, Knowledge Distillation, and more which we couldn't have time to cover in this hackathon.
+> "We greatly appreciate the hackathon for letting us explore the opportunity to apply Tunix, and GlaiveAI for providing the open-source dataset.
+> 
+> Tunix offers much more, like Preference Tuning and Knowledge Distillation, which we hope to explore in future work.
+> 
 > Check out my writeup and code for more details. Thanks for watching!"
 
 ---
