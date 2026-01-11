@@ -15,7 +15,7 @@
 **[VOICEOVER - speak at normal pace, ~40 seconds]**
 > "Hi, I'm Yuya, and this is my solution for the Google Tunix Hackathon.
 > 
-> Small models like Gemma2 2B answer too fast without thinking through problems. The usual fix is reinforcement learning on math puzzles, but verifiable problems like math and code are often not the main use cases for small models. The main use cases are often non-verifiable problems like summarization, creative ideation, or writings. In this hackathon, we're tasked to finetune a small model by using Google's lightweight LLM post-training library, Tunix, to answer better with reasoning traces."
+> Small models like Gemma2 2B answer too fast without thinking through problems. The usual fix is reinforcement learning on math problems, but verifiable problems like math and code are often not the main use cases for small models. The main use cases are often non-verifiable problems like summarization, creative ideation, or writings. In this hackathon, we set out to fine-tune a small model by using Google's lightweight LLM post-training library, Tunix, to answer better with reasoning traces."
 ---
 
 ## 0:40 - 1:10 | The Strategy (30 seconds)
@@ -26,7 +26,7 @@
 **[VOICEOVER - ~30 seconds]**
 > "Our strategy is Supervised Fine-Tuning on a dataset which contains reasoning traces for diverse non-verifiable topics.
 > Why not reinforcement learning? Because small models often fail to explore to get rewards, and it is not always possible to define a reward function for non-verifiable problems.
-> The dataset, glaiveai/reasoning-v1-20m, was generated using DeepSeek-R1-Distill-Llama-70B, and it is available at HuggingFace."
+> The dataset, glaiveai/reasoning-v1-20m, was generated using DeepSeek-R1-Distill-Llama-70B, and it is available on Hugging Face."
 ---
 
 ## 1:10 - 1:30 | The Code 1 (20 seconds)
@@ -48,7 +48,7 @@ def get_gemma_model(ckpt_path):
     return nnx.merge(graph_def, restored_params)
 ```
 **[VOICEOVER - ~20 seconds]**
-> "Here are snippets of our code.
+> "Let's look at the implementation.
 > 
 > We utilize Tunix's `nnx` module for efficient model loading on TPUs. By using `eval_shape`, we initialize the model abstractly without consuming memory until sharding is defined."
 > 
@@ -138,16 +138,3 @@ Wait, I'm not sure if I'm covering all aspects. Maybe I should ...
 > Tunix offers much more, like Preference Tuning and Knowledge Distillation, which we hope to explore in future work.
 > 
 > Check out my writeup and code for more details. Thanks for watching!"
-
----
-
-## Recording Checklist
-
-**Before Recording:**
-- [ ] Open notebook in browser
-- [ ] Prepare demo model (or record output separately)
-- [ ] Print/open this script on second monitor
-- [ ] Test screen recording software
-
-
-**Total: ~180 seconds (3 minutes)**

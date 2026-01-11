@@ -1,7 +1,7 @@
 # Google Slides Content Specification
 **Source**: `docs/video_script.md`
 **Goal**: Create a 6-slide presentation for a hackathon video.
-**Style**: Professional, Technical, "Dark Mode" aesthetic (aligning with Gemma/Tunix).
+**Style**: Professional and Technical.
 
 ---
 

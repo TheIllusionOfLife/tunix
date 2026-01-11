@@ -57,7 +57,7 @@ Our final solution is the result of a long journey through the Tunix ecosystem. 
 
 ### Phase 1: Exploration & Tutorials
 
-We started by exploring the Google DeepMind starter notebooks. We set up the Tunix environment on TPU v5e and successfully reproduced the GRPO pipeline on the GSM8K dataset.
+We started by exploring the Google DeepMind starter notebooks. We set up the Tunix environment on TPU v5e-8 and successfully reproduced the GRPO pipeline on the GSM8K dataset.
 - **Goal**: Understand Tunix `GRPOLearner` and `RLCluster`.
 - **Result**: Functional pipeline, but realized that simple reproduction wouldn't win.
 
